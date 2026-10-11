@@ -1,0 +1,433 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Code">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Source Code\Core">
+      <UniqueIdentifier>{6850215c-42e0-4191-90e5-26fc96ac905d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\External">
+      <UniqueIdentifier>{23ee2676-84e0-429e-8e88-aa2dbce9c193}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Utilities">
+      <UniqueIdentifier>{955586e5-fa88-40fb-a5a4-139cc4824dd0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\SDK">
+      <UniqueIdentifier>{52ca44d4-d324-4b29-b7be-f09ec0cfba79}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features">
+      <UniqueIdentifier>{9b1ca6f6-3db9-4f13-95da-cdf61e828d43}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Protection">
+      <UniqueIdentifier>{f31ac975-66b5-44cb-81b9-5e7abdb99639}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Memory">
+      <UniqueIdentifier>{f98c08ad-60fb-41b0-ba3d-cf3e23727727}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Main">
+      <UniqueIdentifier>{9a6dd21c-20bd-4c4c-8696-cea544f98f66}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Render">
+      <UniqueIdentifier>{06ad6dc7-d0e5-4113-8a58-2aed531c1e21}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Overlay">
+      <UniqueIdentifier>{cc2a1514-7c13-4bc9-8c9a-b75eaab1e337}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\UI">
+      <UniqueIdentifier>{b2f432b1-ee97-4c54-b9c3-0261e6975168}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\UI\Layout">
+      <UniqueIdentifier>{a995c9b9-3e4b-44ed-96a1-20e49c9c7c42}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\UI\Animations">
+      <UniqueIdentifier>{17862a68-7626-4c6d-be7e-703f24a341bc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\UI\Framework">
+      <UniqueIdentifier>{3c314ff4-ca06-4f99-8674-909832ac0836}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\SDK\Entities">
+      <UniqueIdentifier>{1c80d771-149e-4766-8889-77e125969c0e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\SDK\Interfaces">
+      <UniqueIdentifier>{333ddd84-2a28-4a39-b8c3-a0185cc8c436}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\SDK\Offsets">
+      <UniqueIdentifier>{84e36e00-bff1-4f33-a346-208c2caa2974}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\SDK\Schemas">
+      <UniqueIdentifier>{63d11111-929e-4cb9-bd23-53d5663a8db3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\SDK\Types">
+      <UniqueIdentifier>{2d863c41-afd1-4554-ba17-d638db649a94}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Utilities\Config">
+      <UniqueIdentifier>{89d87ef9-111a-4c38-8a15-fe9d8e3424a8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Utilities\Maths">
+      <UniqueIdentifier>{339abd91-7bbe-44a4-9425-dcc5bc7d4052}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Utilities\Vectors">
+      <UniqueIdentifier>{60d0a4cb-5932-46c9-85d9-8873afa88469}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\External\ImGUI">
+      <UniqueIdentifier>{df346078-daee-4f04-9497-701aed0ff2dd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\External\SVG">
+      <UniqueIdentifier>{e5e8b70e-825d-4c6d-9995-2045a9d80c01}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\External\Xorstr">
+      <UniqueIdentifier>{0d622f3e-732d-452d-9177-d042993f2049}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\External\Image">
+      <UniqueIdentifier>{cd66141c-21b1-4a76-9d7e-fe7bd8f23e93}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Visuals">
+      <UniqueIdentifier>{c6f8fc24-d365-44be-b225-2b7839c23c86}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Combat">
+      <UniqueIdentifier>{52d4ec9c-6c3f-4f11-bde6-3e46ee993f51}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Miscellaneous">
+      <UniqueIdentifier>{60effc4b-12d6-42b8-a18e-2e10201287d9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Visuals\Player">
+      <UniqueIdentifier>{55b8f47d-3a91-40c3-81ca-406bfa6c0025}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Visuals\Player\ESP">
+      <UniqueIdentifier>{c8bd58f8-9535-4d62-9397-358a1a5cccc6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Visuals\Player\ESP\Box">
+      <UniqueIdentifier>{f4b5194c-f10c-4b89-8f45-9c3d97355399}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Visuals\Player\ESP\Skeleton">
+      <UniqueIdentifier>{ce166f01-4859-40d1-9dc0-59dc9f0e01ee}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Visuals\Player\ESP\Healthbar">
+      <UniqueIdentifier>{51fc3fb5-6466-4100-a924-056cb12598b3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Visuals\Player\ESP\Nametag">
+      <UniqueIdentifier>{9522f64f-7d11-4984-9e4a-aec2d4fddf9a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\UI\Cards">
+      <UniqueIdentifier>{dce1e05c-d26b-4f4f-b734-1462e63b3f13}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\UI\Header">
+      <UniqueIdentifier>{57e20e6b-837d-4d6a-a940-1a22e1357058}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\UI\Helpers">
+      <UniqueIdentifier>{afb19f0d-af28-4587-9654-d914a18497a5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\UI\Internal">
+      <UniqueIdentifier>{af12a1f5-6fc0-41c1-8209-f49973635385}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\UI\Stars">
+      <UniqueIdentifier>{11e687c3-f416-4cb0-a0b8-90e0375b4694}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Visuals\Player\ESP\Distance">
+      <UniqueIdentifier>{9ed14c06-8e9e-489f-bfea-3b2f6fe73113}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Visuals\Player\ESP\Headcircle">
+      <UniqueIdentifier>{b062dd56-6fb0-4d7d-9b86-1d4cf0838759}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Visuals\Player\ESP\Snapline">
+      <UniqueIdentifier>{cf007293-ba63-44b4-841c-04555e580cfa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Visuals\Player\ESP\Viewdirection">
+      <UniqueIdentifier>{61a605e0-70c8-4cc1-8c01-47a2a5f4a6a5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Visuals\Player\ESP\Weapon">
+      <UniqueIdentifier>{148cae94-d11d-41b9-8404-e2e0525e7848}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Visuals\Player\ESP\Flags">
+      <UniqueIdentifier>{def815b3-fba9-4ef9-a045-bc5370a97404}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Source Code\SDK\Entities\Entities.hpp">
+      <Filter>Source Code\SDK\Entities</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Interfaces\Interfaces.hpp">
+      <Filter>Source Code\SDK\Interfaces</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Types\Types.hpp">
+      <Filter>Source Code\SDK\Types</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Offsets\Offsets.hpp">
+      <Filter>Source Code\SDK\Offsets</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\animationsystem_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\buttons.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\client_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\engine2_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\host_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\interfaces.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\materialsystem2_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\networksystem_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\offsets.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\panorama_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\particles_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\pulse_system_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\rendersystemdx11_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\resourcesystem_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\scenesystem_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\schemasystem_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\server_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\soundsystem_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\steamaudio_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\vphysics2_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\SDK\Schemas\worldrenderer_dll.hpp">
+      <Filter>Source Code\SDK\Schemas</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Utilities\Config\Config.hpp">
+      <Filter>Source Code\Utilities\Config</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Utilities\Maths\Maths.hpp">
+      <Filter>Source Code\Utilities\Maths</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Utilities\Vectors\Vectors.hpp">
+      <Filter>Source Code\Utilities\Vectors</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\External\ImGUI\imconfig.h">
+      <Filter>Source Code\External\ImGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\External\ImGUI\imgui.h">
+      <Filter>Source Code\External\ImGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\External\ImGUI\imgui_impl_dx11.h">
+      <Filter>Source Code\External\ImGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\External\ImGUI\imgui_impl_win32.h">
+      <Filter>Source Code\External\ImGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\External\ImGUI\imgui_internal.h">
+      <Filter>Source Code\External\ImGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\External\ImGUI\imstb_rectpack.h">
+      <Filter>Source Code\External\ImGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\External\ImGUI\imstb_textedit.h">
+      <Filter>Source Code\External\ImGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\External\ImGUI\imstb_truetype.h">
+      <Filter>Source Code\External\ImGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\External\Xorstr\xorstr.hpp">
+      <Filter>Source Code\External\Xorstr</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\External\SVG\nanosvg.h">
+      <Filter>Source Code\External\SVG</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\External\SVG\nanosvgrast.h">
+      <Filter>Source Code\External\SVG</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\External\Image\stb_image.h">
+      <Filter>Source Code\External\Image</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Protection\Protection.hpp">
+      <Filter>Source Code\Core\Protection</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Memory\Memory.hpp">
+      <Filter>Source Code\Core\Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Render\Render.hpp">
+      <Filter>Source Code\Core\Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Overlay\Overlay.hpp">
+      <Filter>Source Code\Core\Overlay</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\UI\UI.hpp">
+      <Filter>Source Code\Core\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\UI\Framework\Framework.hpp">
+      <Filter>Source Code\Core\UI\Framework</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\UI\Animations\Animations.hpp">
+      <Filter>Source Code\Core\UI\Animations</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\UI\Layout\Layout.hpp">
+      <Filter>Source Code\Core\UI\Layout</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Box\Box.hpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Box</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Healthbar\Healthbar.hpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Healthbar</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Nametag\Nametag.hpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Nametag</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Skeleton\Skeleton.hpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Skeleton</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\UI\UI_Cards.hpp">
+      <Filter>Source Code\Core\UI\Cards</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\UI\UI_Header.hpp">
+      <Filter>Source Code\Core\UI\Header</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\UI\UI_Internal.hpp">
+      <Filter>Source Code\Core\UI\Internal</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\UI\UI_Stars.hpp">
+      <Filter>Source Code\Core\UI\Stars</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Distance\Distance.hpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Distance</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Headcircle\Headcircle.hpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Headcircle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Snapline\Snapline.hpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Snapline</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Viewdirection\Viewdirection.hpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Viewdirection</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Weapon\Weapon.hpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Weapon</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Flags\Flags.hpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Flags</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Source Code\Utilities\Config\Config.cpp">
+      <Filter>Source Code\Utilities\Config</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\External\ImGUI\imgui.cpp">
+      <Filter>Source Code\External\ImGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\External\ImGUI\imgui_draw.cpp">
+      <Filter>Source Code\External\ImGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\External\ImGUI\imgui_impl_dx11.cpp">
+      <Filter>Source Code\External\ImGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\External\ImGUI\imgui_impl_win32.cpp">
+      <Filter>Source Code\External\ImGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\External\ImGUI\imgui_tables.cpp">
+      <Filter>Source Code\External\ImGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\External\ImGUI\imgui_widgets.cpp">
+      <Filter>Source Code\External\ImGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Protection\Protection.cpp">
+      <Filter>Source Code\Core\Protection</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Memory\Memory.cpp">
+      <Filter>Source Code\Core\Memory</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Render\Render.cpp">
+      <Filter>Source Code\Core\Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Overlay\Overlay.cpp">
+      <Filter>Source Code\Core\Overlay</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Main\Main.cpp">
+      <Filter>Source Code\Core\Main</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\UI\UI.cpp">
+      <Filter>Source Code\Core\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\UI\Framework\Framework.cpp">
+      <Filter>Source Code\Core\UI\Framework</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\UI\Animations\Animations.cpp">
+      <Filter>Source Code\Core\UI\Animations</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\UI\Layout\Layout.cpp">
+      <Filter>Source Code\Core\UI\Layout</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Box\Box.cpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Box</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\SDK\Entities\Entities.cpp">
+      <Filter>Source Code\SDK\Entities</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Healthbar\Healthbar.cpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Healthbar</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Nametag\Nametag.cpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Nametag</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Skeleton\Skeleton.cpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Skeleton</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\UI\UI_Cards.cpp">
+      <Filter>Source Code\Core\UI\Cards</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\UI\UI_Header.cpp">
+      <Filter>Source Code\Core\UI\Header</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\UI\UI_Helpers.cpp">
+      <Filter>Source Code\Core\UI\Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\UI\UI_Internal.cpp">
+      <Filter>Source Code\Core\UI\Internal</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\UI\UI_Stars.cpp">
+      <Filter>Source Code\Core\UI\Stars</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Distance\Distance.cpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Distance</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Headcircle\Headcircle.cpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Headcircle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Snapline\Snapline.cpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Snapline</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Viewdirection\Viewdirection.cpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Viewdirection</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Weapon\Weapon.cpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Weapon</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Flags\Flags.cpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Flags</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

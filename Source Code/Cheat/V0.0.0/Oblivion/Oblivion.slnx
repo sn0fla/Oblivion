@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Oblivion.vcxproj" Id="a87cf8f8-d73f-4307-8cd9-3aeb94d6dfda" />
+</Solution>

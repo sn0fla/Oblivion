@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{a87cf8f8-d73f-4307-8cd9-3aeb94d6dfda}</ProjectGuid>
+    <RootNamespace>Oblivion</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>C:\Oblivion Development\Cheat\V0.0.0\Oblivion\Source Code\External\Xorstr;C:\Oblivion Development\Cheat\V0.0.0\Oblivion\Source Code\External\ImGUI;C:\Oblivion Development\Cheat\V0.0.0\Oblivion;C:\Oblivion Development\Cheat\V0.0.0\Oblivion\Source Code\External;C:\Oblivion Development\Cheat\V0.0.0\Oblivion\Source Code\External\Image;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Box\Box.hpp" />
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Distance\Distance.hpp" />
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Flags\Flags.hpp" />
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Headcircle\Headcircle.hpp" />
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Healthbar\Healthbar.hpp" />
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Nametag\Nametag.hpp" />
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Skeleton\Skeleton.hpp" />
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Snapline\Snapline.hpp" />
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Viewdirection\Viewdirection.hpp" />
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Weapon\Weapon.hpp" />
+    <ClInclude Include="Source Code\Core\Memory\Memory.hpp" />
+    <ClInclude Include="Source Code\Core\Overlay\Overlay.hpp" />
+    <ClInclude Include="Source Code\Core\Protection\Protection.hpp" />
+    <ClInclude Include="Source Code\Core\Render\Render.hpp" />
+    <ClInclude Include="Source Code\Core\UI\Animations\Animations.hpp" />
+    <ClInclude Include="Source Code\Core\UI\Framework\Framework.hpp" />
+    <ClInclude Include="Source Code\Core\UI\Layout\Layout.hpp" />
+    <ClInclude Include="Source Code\Core\UI\UI.hpp" />
+    <ClInclude Include="Source Code\Core\UI\UI_Cards.hpp" />
+    <ClInclude Include="Source Code\Core\UI\UI_Header.hpp" />
+    <ClInclude Include="Source Code\Core\UI\UI_Internal.hpp" />
+    <ClInclude Include="Source Code\Core\UI\UI_Stars.hpp" />
+    <ClInclude Include="Source Code\External\Image\stb_image.h" />
+    <ClInclude Include="Source Code\External\ImGUI\imconfig.h" />
+    <ClInclude Include="Source Code\External\ImGUI\imgui.h" />
+    <ClInclude Include="Source Code\External\ImGUI\imgui_impl_dx11.h" />
+    <ClInclude Include="Source Code\External\ImGUI\imgui_impl_win32.h" />
+    <ClInclude Include="Source Code\External\ImGUI\imgui_internal.h" />
+    <ClInclude Include="Source Code\External\ImGUI\imstb_rectpack.h" />
+    <ClInclude Include="Source Code\External\ImGUI\imstb_textedit.h" />
+    <ClInclude Include="Source Code\External\ImGUI\imstb_truetype.h" />
+    <ClInclude Include="Source Code\External\SVG\nanosvg.h" />
+    <ClInclude Include="Source Code\External\SVG\nanosvgrast.h" />
+    <ClInclude Include="Source Code\External\Xorstr\xorstr.hpp" />
+    <ClInclude Include="Source Code\SDK\Entities\Entities.hpp" />
+    <ClInclude Include="Source Code\SDK\Interfaces\Interfaces.hpp" />
+    <ClInclude Include="Source Code\SDK\Offsets\Offsets.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\animationsystem_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\buttons.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\client_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\engine2_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\host_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\interfaces.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\materialsystem2_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\networksystem_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\offsets.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\panorama_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\particles_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\pulse_system_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\rendersystemdx11_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\resourcesystem_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\scenesystem_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\schemasystem_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\server_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\soundsystem_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\steamaudio_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\vphysics2_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Schemas\worldrenderer_dll.hpp" />
+    <ClInclude Include="Source Code\SDK\Types\Types.hpp" />
+    <ClInclude Include="Source Code\Utilities\Config\Config.hpp" />
+    <ClInclude Include="Source Code\Utilities\Maths\Maths.hpp" />
+    <ClInclude Include="Source Code\Utilities\Vectors\Vectors.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Box\Box.cpp" />
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Distance\Distance.cpp" />
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Flags\Flags.cpp" />
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Headcircle\Headcircle.cpp" />
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Healthbar\Healthbar.cpp" />
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Nametag\Nametag.cpp" />
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Skeleton\Skeleton.cpp" />
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Snapline\Snapline.cpp" />
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Viewdirection\Viewdirection.cpp" />
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Weapon\Weapon.cpp" />
+    <ClCompile Include="Source Code\Core\Main\Main.cpp" />
+    <ClCompile Include="Source Code\Core\Memory\Memory.cpp" />
+    <ClCompile Include="Source Code\Core\Overlay\Overlay.cpp" />
+    <ClCompile Include="Source Code\Core\Protection\Protection.cpp" />
+    <ClCompile Include="Source Code\Core\Render\Render.cpp" />
+    <ClCompile Include="Source Code\Core\UI\Animations\Animations.cpp" />
+    <ClCompile Include="Source Code\Core\UI\Framework\Framework.cpp" />
+    <ClCompile Include="Source Code\Core\UI\Layout\Layout.cpp" />
+    <ClCompile Include="Source Code\Core\UI\UI.cpp" />
+    <ClCompile Include="Source Code\Core\UI\UI_Cards.cpp" />
+    <ClCompile Include="Source Code\Core\UI\UI_Header.cpp" />
+    <ClCompile Include="Source Code\Core\UI\UI_Helpers.cpp" />
+    <ClCompile Include="Source Code\Core\UI\UI_Internal.cpp" />
+    <ClCompile Include="Source Code\Core\UI\UI_Stars.cpp" />
+    <ClCompile Include="Source Code\External\ImGUI\imgui.cpp" />
+    <ClCompile Include="Source Code\External\ImGUI\imgui_draw.cpp" />
+    <ClCompile Include="Source Code\External\ImGUI\imgui_impl_dx11.cpp" />
+    <ClCompile Include="Source Code\External\ImGUI\imgui_impl_win32.cpp" />
+    <ClCompile Include="Source Code\External\ImGUI\imgui_tables.cpp" />
+    <ClCompile Include="Source Code\External\ImGUI\imgui_widgets.cpp" />
+    <ClCompile Include="Source Code\SDK\Entities\Entities.cpp" />
+    <ClCompile Include="Source Code\Utilities\Config\Config.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
