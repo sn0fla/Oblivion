@@ -226,8 +226,8 @@ To disable Safe Mode:
 
 | Problem | Solution |
 |---------|----------|
-| Menu doesn't open | Run as Administrator, check `INSERT` key |
-| ESP not showing | Make sure CS2 is running and you're in a match |
+| Menu doesn't open | Run as Administrator, check `INSERT` key, run CS2 in fullscreen windowed |
+| ESP not showing | Make sure CS2 is running and you're in a match, run CS2 in fullscreen windowed |
 | Game crashes | Disable Safe Mode only if needed; update offsets |
 | Overlay flickers | Disable fullscreen optimizations in CS2 properties |
 | Config not saving | Check folder permissions for `C:\Oblivion\Configurations` |
@@ -239,7 +239,7 @@ To disable Safe Mode:
 ## ❓ FAQ
 
 **Q: Is this detected?**  
-A: We cannot guarantee safety. Use at your own risk. Safe Mode reduces risk.
+A: We cannot guarantee safety, but currently it's undetected. Always use at your own risk. Safe Mode reduces risk.
 
 **Q: Does it work on Faceit / ESEA?**  
 A: No. This is for official CS2 servers only.
@@ -251,7 +251,7 @@ A: No. It's fully external.
 A: Join our Discord → [https://discord.gg/DQXRjR6FhW](https://discord.gg/DQXRjR6FhW)
 
 **Q: Is it free?**  
-A: Join the Discord to find out about access and updates.
+A: Yes, Oblivion is completely free and open-source.
 
 ---
 
