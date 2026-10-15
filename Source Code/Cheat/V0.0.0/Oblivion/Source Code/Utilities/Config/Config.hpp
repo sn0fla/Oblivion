@@ -67,6 +67,11 @@ struct Config {
     bool  esp_enemy_flags_ammo = true;
     float esp_enemy_flags_ammo_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
+    bool  esp_enemy_offscreen = false;
+    float esp_enemy_offscreen_color[4] = { 1.0f, 0.3f, 0.3f, 1.0f };
+    float esp_enemy_offscreen_distance = 0.35f;
+    float esp_enemy_offscreen_size = 22.0f;
+
     bool esp_team_enable = false;
     bool esp_team_box = false;
     float esp_team_box_color[4] = { 0.2f, 1.0f, 0.2f, 1.0f };
@@ -115,6 +120,11 @@ struct Config {
     float esp_team_flags_ping_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
     bool  esp_team_flags_ammo = true;
     float esp_team_flags_ammo_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+    bool  esp_team_offscreen = false;
+    float esp_team_offscreen_color[4] = { 0.3f, 1.0f, 0.3f, 1.0f };
+    float esp_team_offscreen_distance = 0.35f;
+    float esp_team_offscreen_size = 22.0f;
 
     bool safe_mode = true;
     bool safe_mode_no_warn = false;

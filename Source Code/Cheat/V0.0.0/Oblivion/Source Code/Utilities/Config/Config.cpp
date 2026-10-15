@@ -111,6 +111,11 @@ void Config::SetDefaults() {
     esp_enemy_flags_ammo = true;
     esp_enemy_flags_ammo_color[0] = 1.0f; esp_enemy_flags_ammo_color[1] = 1.0f; esp_enemy_flags_ammo_color[2] = 1.0f; esp_enemy_flags_ammo_color[3] = 1.0f;
 
+    esp_enemy_offscreen = false;
+    esp_enemy_offscreen_color[0] = 1.0f; esp_enemy_offscreen_color[1] = 0.3f; esp_enemy_offscreen_color[2] = 0.3f; esp_enemy_offscreen_color[3] = 1.0f;
+    esp_enemy_offscreen_distance = 0.35f;
+    esp_enemy_offscreen_size = 22.0f;
+
     esp_team_enable = false;
     esp_team_box = false;
     esp_team_box_color[0] = 0.2f; esp_team_box_color[1] = 1.0f; esp_team_box_color[2] = 0.2f; esp_team_box_color[3] = 1.0f;
@@ -160,6 +165,11 @@ void Config::SetDefaults() {
     esp_team_flags_ammo = true;
     esp_team_flags_ammo_color[0] = 1.0f; esp_team_flags_ammo_color[1] = 1.0f; esp_team_flags_ammo_color[2] = 1.0f; esp_team_flags_ammo_color[3] = 1.0f;
 
+    esp_team_offscreen = false;
+    esp_team_offscreen_color[0] = 0.3f; esp_team_offscreen_color[1] = 1.0f; esp_team_offscreen_color[2] = 0.3f; esp_team_offscreen_color[3] = 1.0f;
+    esp_team_offscreen_distance = 0.35f;
+    esp_team_offscreen_size = 22.0f;
+
     safe_mode = true;
     safe_mode_no_warn = false;
 }
@@ -186,6 +196,9 @@ void Config::Save(const std::string& path) {
     file << "snapline = " << (esp_enemy_snapline ? "true" : "false") << "\n";
     file << "viewdirection = " << (esp_enemy_viewdirection ? "true" : "false") << "\n";
     file << "weapon = " << (esp_enemy_weapon ? "true" : "false") << "\n";
+    file << "offscreen = " << (esp_enemy_offscreen ? "true" : "false") << "\n";
+    file << "offscreen_distance = " << esp_enemy_offscreen_distance << "\n";
+    file << "offscreen_size = " << esp_enemy_offscreen_size << "\n";
     WriteColor(file, "box_color", esp_enemy_box_color);
     WriteColor(file, "fill_color", esp_enemy_box_fill_color);
     WriteColor(file, "outline_color", esp_enemy_box_outline_color);
@@ -197,6 +210,7 @@ void Config::Save(const std::string& path) {
     WriteColor(file, "snapline_color", esp_enemy_snapline_color);
     WriteColor(file, "viewdirection_color", esp_enemy_viewdirection_color);
     WriteColor(file, "weapon_color", esp_enemy_weapon_color);
+    WriteColor(file, "offscreen_color", esp_enemy_offscreen_color);
 
     WriteFlagsBlock(file, "flags",
         esp_enemy_flags, esp_enemy_flags_color,
@@ -226,6 +240,9 @@ void Config::Save(const std::string& path) {
     file << "snapline = " << (esp_team_snapline ? "true" : "false") << "\n";
     file << "viewdirection = " << (esp_team_viewdirection ? "true" : "false") << "\n";
     file << "weapon = " << (esp_team_weapon ? "true" : "false") << "\n";
+    file << "offscreen = " << (esp_team_offscreen ? "true" : "false") << "\n";
+    file << "offscreen_distance = " << esp_team_offscreen_distance << "\n";
+    file << "offscreen_size = " << esp_team_offscreen_size << "\n";
     WriteColor(file, "box_color", esp_team_box_color);
     WriteColor(file, "fill_color", esp_team_box_fill_color);
     WriteColor(file, "outline_color", esp_team_box_outline_color);
@@ -237,6 +254,7 @@ void Config::Save(const std::string& path) {
     WriteColor(file, "snapline_color", esp_team_snapline_color);
     WriteColor(file, "viewdirection_color", esp_team_viewdirection_color);
     WriteColor(file, "weapon_color", esp_team_weapon_color);
+    WriteColor(file, "offscreen_color", esp_team_offscreen_color);
 
     WriteFlagsBlock(file, "flags",
         esp_team_flags, esp_team_flags_color,
@@ -362,6 +380,9 @@ void Config::Load(const std::string& path) {
             else if (key == "snapline") esp_enemy_snapline = b;
             else if (key == "viewdirection") esp_enemy_viewdirection = b;
             else if (key == "weapon") esp_enemy_weapon = b;
+            else if (key == "offscreen") esp_enemy_offscreen = b;
+            else if (key == "offscreen_distance") { try { esp_enemy_offscreen_distance = std::stof(value); } catch (...) {} }
+            else if (key == "offscreen_size") { try { esp_enemy_offscreen_size = std::stof(value); } catch (...) {} }
             else if (key == "box_color") ParseColor(value, esp_enemy_box_color);
             else if (key == "fill_color") ParseColor(value, esp_enemy_box_fill_color);
             else if (key == "outline_color") ParseColor(value, esp_enemy_box_outline_color);
@@ -373,6 +394,7 @@ void Config::Load(const std::string& path) {
             else if (key == "snapline_color") ParseColor(value, esp_enemy_snapline_color);
             else if (key == "viewdirection_color") ParseColor(value, esp_enemy_viewdirection_color);
             else if (key == "weapon_color") ParseColor(value, esp_enemy_weapon_color);
+            else if (key == "offscreen_color") ParseColor(value, esp_enemy_offscreen_color);
             else {
                 bool consumed = false;
                 LoadFlagsBlock(key, value,
@@ -405,6 +427,9 @@ void Config::Load(const std::string& path) {
             else if (key == "snapline") esp_team_snapline = b;
             else if (key == "viewdirection") esp_team_viewdirection = b;
             else if (key == "weapon") esp_team_weapon = b;
+            else if (key == "offscreen") esp_team_offscreen = b;
+            else if (key == "offscreen_distance") { try { esp_team_offscreen_distance = std::stof(value); } catch (...) {} }
+            else if (key == "offscreen_size") { try { esp_team_offscreen_size = std::stof(value); } catch (...) {} }
             else if (key == "box_color") ParseColor(value, esp_team_box_color);
             else if (key == "fill_color") ParseColor(value, esp_team_box_fill_color);
             else if (key == "outline_color") ParseColor(value, esp_team_box_outline_color);
@@ -416,6 +441,7 @@ void Config::Load(const std::string& path) {
             else if (key == "snapline_color") ParseColor(value, esp_team_snapline_color);
             else if (key == "viewdirection_color") ParseColor(value, esp_team_viewdirection_color);
             else if (key == "weapon_color") ParseColor(value, esp_team_weapon_color);
+            else if (key == "offscreen_color") ParseColor(value, esp_team_offscreen_color);
             else {
                 bool consumed = false;
                 LoadFlagsBlock(key, value,
