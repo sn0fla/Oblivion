@@ -53,6 +53,7 @@ struct FrameSnapshot {
     std::vector<FrameEntity> entities;
     ViewMatrix viewMatrix{};
     Vector3 localOrigin{};
+    Vector3 localVelocity{};
     uint8_t localTeam = 0;
     double publishTime = 0.0;
     double buildDuration = 0.0;
@@ -64,11 +65,25 @@ void StartEntityThread();
 void StopEntityThread();
 void SignalEntityUpdate();
 
-const FrameSnapshot* AcquireFrameSnapshot();
-void ReleaseFrameSnapshot();
+void AcquireFrameSnapshot(FrameSnapshot& out);
+
+void SetInterpTime(float t);
+float GetInterpTime();
 
 double FrameTime();
 
 double GetEntityThreadHz();
 uint64_t GetEntityThreadIterations();
 double GetEntityThreadLastBuildMs();
+double GetLastSnapshotPublishTime();
+
+inline std::atomic<double> g_uiRenderMs{ 0.0 };
+inline std::atomic<double> g_viewMatrixReadMs{ 0.0 };
+inline std::atomic<double> g_snapshotWaitMs{ 0.0 };
+inline std::atomic<double> g_espRenderMs{ 0.0 };
+inline std::atomic<double> g_renderCallbackMs{ 0.0 };
+inline std::atomic<double> g_snapshotAgeAtRenderMs{ 0.0 };
+inline std::atomic<int>    g_renderEntityCount{ 0 };
+
+inline std::atomic<double> g_overlayPresentLatencyMs{ 0.0 };
+inline std::atomic<double> g_overlayFrameTimeMs{ 0.0 };

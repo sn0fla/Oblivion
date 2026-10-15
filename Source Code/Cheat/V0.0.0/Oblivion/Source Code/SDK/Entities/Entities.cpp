@@ -8,7 +8,7 @@
 #include <cstdio>
 #include <thread>
 #include <atomic>
-#include <mutex>
+#include <cmath>
 
 double FrameTime() {
     static const LARGE_INTEGER freq = [] {
@@ -69,7 +69,6 @@ namespace {
         case 523: return "Talon Knife";
         case 525: return "Skeleton Knife";
         case 526: return "Kukri Knife";
-
         case 1:  return "Deagle";
         case 2:  return "Dual Berettas";
         case 3:  return "Five-SeveN";
@@ -136,7 +135,6 @@ namespace {
 
     void ReadWeaponInfo(uintptr_t pawn, uintptr_t entityList, WeaponInfo& out) {
         if (!pawn) return;
-
         using namespace cs2_dumper::schemas::client_dll;
 
         const uintptr_t weaponServices = mem.Read<uintptr_t>(
@@ -169,7 +167,6 @@ namespace {
     bool FindC4OnPlayer(uintptr_t pawn, uintptr_t entityList, uintptr_t& c4Out) {
         c4Out = 0;
         if (!pawn) return false;
-
         using namespace cs2_dumper::schemas::client_dll;
 
         const uintptr_t weaponServices = mem.Read<uintptr_t>(
@@ -185,10 +182,7 @@ namespace {
                 const uintptr_t econItem = attrMgr + C_AttributeContainer::m_Item;
                 const int defIndex = mem.Read<uint16_t>(
                     econItem + C_EconItemView::m_iItemDefinitionIndex);
-                if (defIndex == 49) {
-                    c4Out = activeWeapon;
-                    return true;
-                }
+                if (defIndex == 49) { c4Out = activeWeapon; return true; }
             }
         }
 
@@ -202,20 +196,15 @@ namespace {
         for (uint32_t i = 0; i < size; ++i) {
             const uint32_t handle = mem.Read<uint32_t>(dataPtr + i * 4);
             if (!handle || handle == 0xFFFFFFFF) continue;
-
             const uintptr_t weapon = ResolveEntityFromHandle(entityList, handle);
             if (!weapon) continue;
 
             const uintptr_t attrMgr = weapon + C_EconEntity::m_AttributeManager;
             const uintptr_t econItem = attrMgr + C_AttributeContainer::m_Item;
-
             const int defIndex = mem.Read<uint16_t>(
                 econItem + C_EconItemView::m_iItemDefinitionIndex);
 
-            if (defIndex == 49) {
-                c4Out = weapon;
-                return true;
-            }
+            if (defIndex == 49) { c4Out = weapon; return true; }
         }
         return false;
     }
@@ -268,98 +257,43 @@ namespace {
     uintptr_t ResolvePawn(uintptr_t entityList, uint32_t handle) {
         return ResolveEntityFromHandle(entityList, handle);
     }
-
-    void RefreshPositionsInPlace(FrameSnapshot& frame) {
-        using namespace cs2_dumper::schemas::client_dll;
-
-        const size_t kDormantOff = CGameSceneNode::m_bDormant;
-        const size_t kOriginOff = CGameSceneNode::m_vecAbsOrigin;
-        const size_t kMinOff = (std::min)(kDormantOff, kOriginOff);
-        const size_t kMaxEnd = (std::max)(kDormantOff + 1, kOriginOff + 12);
-        const size_t kSpan = kMaxEnd - kMinOff;
-
-        constexpr size_t kBoneStride = 32;
-
-        uint8_t sceneBuf[0x200];
-        uint8_t boneBuf[kBoneCount * kBoneStride];
-
-        for (auto& ent : frame.entities) {
-            if (ent.sceneNode) {
-                if (mem.ReadRaw(ent.sceneNode + kMinOff, sceneBuf, kSpan)) {
-                    ent.isDormant = (sceneBuf[kDormantOff - kMinOff] != 0);
-                    std::memcpy(&ent.origin, sceneBuf + (kOriginOff - kMinOff), sizeof(Vector3));
-                }
-            }
-
-            bool bonesOk = false;
-            if (ent.boneArray) {
-                if (mem.ReadRaw(ent.boneArray, boneBuf, sizeof(boneBuf))) {
-                    for (int b = 0; b < kBoneCount; ++b)
-                        std::memcpy(&ent.bones[b], boneBuf + b * kBoneStride, sizeof(Vector3));
-                    ent.hasBones = true;
-                    bonesOk = true;
-                }
-                else {
-                    ent.hasBones = false;
-                }
-            }
-            else {
-                ent.hasBones = false;
-            }
-
-            const Vector3& hb = ent.bones[static_cast<int>(BoneIndex::Head)];
-            const bool headValid = bonesOk && (hb.x != 0.0f || hb.y != 0.0f || hb.z != 0.0f);
-
-            if (headValid) {
-                const Vector3& lf = ent.bones[static_cast<int>(BoneIndex::LeftFoot)];
-                const Vector3& rf = ent.bones[static_cast<int>(BoneIndex::RightFoot)];
-                ent.headPos = hb;
-                ent.feetPos.x = (lf.x + rf.x) * 0.5f;
-                ent.feetPos.y = (lf.y + rf.y) * 0.5f;
-                ent.feetPos.z = (lf.z + rf.z) * 0.5f;
-            }
-            else {
-                ent.headPos = ent.origin;
-                ent.headPos.z += 72.0f;
-                ent.feetPos = ent.origin;
-            }
-        }
-    }
 }
 
 void BuildFrameSnapshot(FrameSnapshot& frame) {
     frame.entities.clear();
     frame.localTeam = 0;
     frame.localOrigin = Vector3{};
+    frame.localVelocity = Vector3{};
     frame.viewMatrix = ViewMatrix{};
 
     if (!mem.client || !mem.pid || !mem.handle) return;
 
-    mem.ReadRaw(mem.client + cs2_dumper::offsets::client_dll::dwViewMatrix,
-        &frame.viewMatrix, sizeof(ViewMatrix));
+    using namespace cs2_dumper::schemas::client_dll;
 
     const uintptr_t localPawn = mem.Read<uintptr_t>(
         mem.client + cs2_dumper::offsets::client_dll::dwLocalPlayerPawn);
+
+    mem.ReadRaw(mem.client + cs2_dumper::offsets::client_dll::dwViewMatrix,
+        &frame.viewMatrix, sizeof(ViewMatrix));
+
     if (!localPawn || localPawn < 0x10000) return;
 
-    frame.localTeam = mem.Read<uint8_t>(
-        localPawn + cs2_dumper::schemas::client_dll::C_BaseEntity::m_iTeamNum);
+    frame.localTeam = mem.Read<uint8_t>(localPawn + C_BaseEntity::m_iTeamNum);
 
     {
         const uintptr_t localScene = mem.Read<uintptr_t>(
-            localPawn + cs2_dumper::schemas::client_dll::C_BaseEntity::m_pGameSceneNode);
+            localPawn + C_BaseEntity::m_pGameSceneNode);
         if (localScene) {
-            mem.ReadRaw(
-                localScene + cs2_dumper::schemas::client_dll::CGameSceneNode::m_vecAbsOrigin,
+            mem.ReadRaw(localScene + CGameSceneNode::m_vecAbsOrigin,
                 &frame.localOrigin, sizeof(Vector3));
         }
+        mem.ReadRaw(localPawn + C_BaseEntity::m_vecAbsVelocity,
+            &frame.localVelocity, sizeof(Vector3));
     }
 
     const uintptr_t entityList = mem.Read<uintptr_t>(
         mem.client + cs2_dumper::offsets::client_dll::dwEntityList);
     if (!entityList) return;
-
-    using namespace cs2_dumper::schemas::client_dll;
 
     const size_t kTeamOff = C_BaseEntity::m_iTeamNum;
     const size_t kLifeOff = C_BaseEntity::m_lifeState;
@@ -388,6 +322,7 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
     constexpr size_t kBufSize = 0x2000;
     uint8_t pawnBuf[kBufSize];
     uint8_t sceneBuf[kBufSize];
+    alignas(16) uint8_t boneBuf[kBoneCount * kBoneStride];
 
     const double now = FrameTime();
     if (entityList != g_cachedEntityList || g_cacheCount == 0 ||
@@ -560,6 +495,30 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
 
         entity.boneArray = slot.boneArray;
 
+        if (entity.boneArray && !entity.isDormant) {
+            if (mem.ReadRaw(entity.boneArray, boneBuf, sizeof(boneBuf))) {
+                for (int b = 0; b < kBoneCount; ++b)
+                    std::memcpy(&entity.bones[b], boneBuf + b * kBoneStride, sizeof(Vector3));
+                entity.hasBones = true;
+
+                const Vector3& hb = entity.bones[static_cast<int>(BoneIndex::Head)];
+                if (hb.x != 0.0f || hb.y != 0.0f || hb.z != 0.0f) {
+                    const Vector3& lf = entity.bones[static_cast<int>(BoneIndex::LeftFoot)];
+                    const Vector3& rf = entity.bones[static_cast<int>(BoneIndex::RightFoot)];
+                    entity.headPos = hb;
+                    entity.feetPos.x = (lf.x + rf.x) * 0.5f;
+                    entity.feetPos.y = (lf.y + rf.y) * 0.5f;
+                    entity.feetPos.z = (lf.z + rf.z) * 0.5f;
+                }
+            }
+            else {
+                entity.hasBones = false;
+            }
+        }
+        else {
+            entity.hasBones = false;
+        }
+
         frame.entities.push_back(entity);
     }
 }
@@ -567,7 +526,6 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
 static FrameSnapshot    g_snapshots[2];
 static std::atomic<int> g_readIdx{ 0 };
 static int              g_writeIdx = 1;
-static std::mutex       g_snapshotMutex;
 
 static std::thread      g_entityThread;
 static std::atomic<bool> g_entityThreadRunning{ false };
@@ -575,6 +533,7 @@ static std::atomic<bool> g_entityThreadRunning{ false };
 static std::atomic<double>   g_entityThreadHz{ 0.0 };
 static std::atomic<uint64_t> g_entityThreadIters{ 0 };
 static std::atomic<double>   g_entityThreadLastBuildMs{ 0.0 };
+static std::atomic<double>   g_lastPublishTime{ 0.0 };
 
 static void EntityThreadFunc() {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
@@ -596,30 +555,28 @@ static void EntityThreadFunc() {
         const double t0 = FrameTime();
 
         FrameSnapshot& dst = g_snapshots[g_writeIdx];
+
         BuildFrameSnapshot(dst);
 
         const double t1 = FrameTime();
         dst.publishTime = t1;
         dst.buildDuration = (t1 - t0) * 1000.0;
         g_entityThreadLastBuildMs.store(dst.buildDuration, std::memory_order_relaxed);
+        g_lastPublishTime.store(t1, std::memory_order_relaxed);
 
-        {
-            std::lock_guard<std::mutex> lock(g_snapshotMutex);
-            int prev = g_readIdx.exchange(g_writeIdx, std::memory_order_release);
-            g_writeIdx = prev;
-        }
+        int prev = g_readIdx.exchange(g_writeIdx, std::memory_order_acq_rel);
+        g_writeIdx = prev;
 
         localIters++;
-        const double now = FrameTime();
-        const double span = now - hzWindowStart;
+        const double span = t1 - hzWindowStart;
         if (span >= 0.5) {
             g_entityThreadHz.store(static_cast<double>(localIters) / span, std::memory_order_relaxed);
             g_entityThreadIters.store(localIters, std::memory_order_relaxed);
             localIters = 0;
-            hzWindowStart = now;
+            hzWindowStart = t1;
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::yield();
     }
 }
 
@@ -637,20 +594,9 @@ void StopEntityThread() {
 
 void SignalEntityUpdate() {}
 
-const FrameSnapshot* AcquireFrameSnapshot() {
-    g_snapshotMutex.lock();
+void AcquireFrameSnapshot(FrameSnapshot& out) {
     const int idx = g_readIdx.load(std::memory_order_acquire);
-    FrameSnapshot& snap = g_snapshots[idx];
-    if (snap.publishTime == 0.0) {
-        g_snapshotMutex.unlock();
-        return nullptr;
-    }
-    RefreshPositionsInPlace(snap);
-    return &snap;
-}
-
-void ReleaseFrameSnapshot() {
-    g_snapshotMutex.unlock();
+    out = g_snapshots[idx];
 }
 
 double GetEntityThreadHz() {
@@ -663,4 +609,8 @@ uint64_t GetEntityThreadIterations() {
 
 double GetEntityThreadLastBuildMs() {
     return g_entityThreadLastBuildMs.load(std::memory_order_relaxed);
+}
+
+double GetLastSnapshotPublishTime() {
+    return g_lastPublishTime.load(std::memory_order_relaxed);
 }
