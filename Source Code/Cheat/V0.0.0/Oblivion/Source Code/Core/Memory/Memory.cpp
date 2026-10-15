@@ -13,45 +13,220 @@
 
 std::atomic<bool> g_AllowMemoryWrite{ false };
 
-static uintptr_t FindSyscallStub(const char* funcName) {
-    HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
-    if (!ntdll) return 0;
+static uintptr_t g_ntdllBase = 0;
+static uintptr_t g_syscallGadget = 0;
+static uint8_t* g_stubPage = nullptr;
+static size_t    g_stubOffset = 0;
 
-    FARPROC proc = GetProcAddress(ntdll, funcName);
-    if (!proc) return 0;
+static bool SafeMemcpy(uintptr_t src, void* dst, size_t size) {
+    __try {
+        memcpy(dst, reinterpret_cast<const void*>(src), size);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
 
-    BYTE* bytes = (BYTE*)proc;
-    for (int i = 0; i < 0x60; i++) {
-        if (bytes[i] == 0x4C && bytes[i + 1] == 0x8B && bytes[i + 2] == 0xD1 && bytes[i + 3] == 0xB8) {
-            return (uintptr_t)(bytes + i);
-        }
+static uintptr_t GetNtdllBase() {
+    if (!g_ntdllBase) {
+        HMODULE h = GetModuleHandleA(xorstr_("ntdll.dll"));
+        g_ntdllBase = reinterpret_cast<uintptr_t>(h);
+    }
+    return g_ntdllBase;
+}
+
+static uintptr_t FindExportByName(uintptr_t moduleBase, const char* name) {
+    if (!moduleBase || !name) return 0;
+
+    IMAGE_DOS_HEADER dos{};
+    if (!SafeMemcpy(moduleBase, &dos, sizeof(dos))) return 0;
+    if (dos.e_magic != IMAGE_DOS_SIGNATURE) return 0;
+
+    IMAGE_NT_HEADERS nt{};
+    if (!SafeMemcpy(moduleBase + dos.e_lfanew, &nt, sizeof(nt))) return 0;
+    if (nt.Signature != IMAGE_NT_SIGNATURE) return 0;
+
+    DWORD expRva = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+    if (!expRva) return 0;
+
+    IMAGE_EXPORT_DIRECTORY exp{};
+    if (!SafeMemcpy(moduleBase + expRva, &exp, sizeof(exp))) return 0;
+    if (exp.NumberOfNames == 0 || exp.NumberOfFunctions == 0) return 0;
+
+    std::vector<DWORD> names(exp.NumberOfNames);
+    std::vector<DWORD> funcs(exp.NumberOfFunctions);
+    std::vector<WORD>  ords(exp.NumberOfNames);
+
+    if (!SafeMemcpy(moduleBase + exp.AddressOfNames, names.data(), names.size() * sizeof(DWORD))) return 0;
+    if (!SafeMemcpy(moduleBase + exp.AddressOfFunctions, funcs.data(), funcs.size() * sizeof(DWORD))) return 0;
+    if (!SafeMemcpy(moduleBase + exp.AddressOfNameOrdinals, ords.data(), ords.size() * sizeof(WORD))) return 0;
+
+    for (DWORD i = 0; i < exp.NumberOfNames; ++i) {
+        char fnName[256]{};
+        if (!SafeMemcpy(moduleBase + names[i], fnName, sizeof(fnName) - 1)) continue;
+        if (strcmp(fnName, name) != 0) continue;
+        WORD ord = ords[i];
+        if (ord >= exp.NumberOfFunctions) return 0;
+        return moduleBase + funcs[ord];
     }
     return 0;
 }
 
+static uint32_t ExtractSSNFromStub(uintptr_t addr) {
+    BYTE buf[8]{};
+    if (!SafeMemcpy(addr, buf, sizeof(buf))) return 0;
+    if (buf[0] == 0x4C && buf[1] == 0x8B && buf[2] == 0xD1 && buf[3] == 0xB8)
+        return *reinterpret_cast<uint32_t*>(buf + 4);
+    return 0;
+}
+
+static uintptr_t ExtractGadgetFromStub(uintptr_t addr) {
+    BYTE buf[64]{};
+    if (!SafeMemcpy(addr, buf, sizeof(buf))) return 0;
+    for (int i = 0; i + 2 < static_cast<int>(sizeof(buf)); ++i) {
+        if (buf[i] == 0x0F && buf[i + 1] == 0x05 && buf[i + 2] == 0xC3)
+            return addr + i;
+    }
+    return 0;
+}
+
+static uint32_t ResolveSSN(uintptr_t funcAddr) {
+    uint32_t ssn = ExtractSSNFromStub(funcAddr);
+    if (ssn) return ssn;
+
+    for (int i = 1; i <= 64; ++i) {
+        uintptr_t neighbor = funcAddr - static_cast<uintptr_t>(i) * 32;
+        uint32_t nb = ExtractSSNFromStub(neighbor);
+        if (nb) return nb + static_cast<uint32_t>(i);
+    }
+    return 0;
+}
+
+static bool InitSyscallEngine() {
+    if (g_syscallGadget) return true;
+
+    uintptr_t ntdll = GetNtdllBase();
+    if (!ntdll) return false;
+
+    const char* probes[] = {
+        "NtReadVirtualMemory",
+        "NtWriteVirtualMemory",
+        "NtOpenProcess",
+        "NtClose",
+        "NtQuerySystemInformation",
+        "NtAllocateVirtualMemory",
+        "NtProtectVirtualMemory",
+        "NtCreateFile",
+        "NtQueryInformationProcess"
+    };
+
+    for (const char* name : probes) {
+        uintptr_t fn = FindExportByName(ntdll, name);
+        if (!fn) continue;
+        uintptr_t gadget = ExtractGadgetFromStub(fn);
+        if (gadget) { g_syscallGadget = gadget; break; }
+    }
+
+    if (!g_syscallGadget) return false;
+
+    g_stubPage = static_cast<uint8_t*>(
+        VirtualAlloc(nullptr, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    return g_stubPage != nullptr;
+}
+
+static void* BuildStub(uint32_t ssn) {
+    if (!g_stubPage || !g_syscallGadget) return nullptr;
+    if (g_stubOffset + 32 > 0x1000) return nullptr;
+
+    uint8_t* s = g_stubPage + g_stubOffset;
+    s[0] = 0x4C; s[1] = 0x8B; s[2] = 0xD1;
+    s[3] = 0xB8;
+    *reinterpret_cast<uint32_t*>(s + 4) = ssn;
+    s[8] = 0xFF; s[9] = 0x25;
+    *reinterpret_cast<uint32_t*>(s + 10) = 0;
+    *reinterpret_cast<uintptr_t*>(s + 14) = g_syscallGadget;
+
+    void* result = s;
+    g_stubOffset += 32;
+    return result;
+}
+
+static void* BuildStubFor(const char* name) {
+    if (!InitSyscallEngine()) return nullptr;
+    uintptr_t fn = FindExportByName(GetNtdllBase(), name);
+    if (!fn) return nullptr;
+    uint32_t ssn = ResolveSSN(fn);
+    if (!ssn) return nullptr;
+    return BuildStub(ssn);
+}
+
 pNtReadVirtualMemory_t GetNtReadVirtualMemory() {
-    static auto pFn = (pNtReadVirtualMemory_t)FindSyscallStub(xorstr_("NtReadVirtualMemory"));
-    return pFn;
+    static pNtReadVirtualMemory_t fn = []() -> pNtReadVirtualMemory_t {
+        void* stub = BuildStubFor(xorstr_("NtReadVirtualMemory"));
+        if (stub) return reinterpret_cast<pNtReadVirtualMemory_t>(stub);
+        HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
+        return reinterpret_cast<pNtReadVirtualMemory_t>(
+            GetProcAddress(ntdll, xorstr_("NtReadVirtualMemory")));
+        }();
+    return fn;
 }
 
 pNtWriteVirtualMemory_t GetNtWriteVirtualMemory() {
-    static auto pFn = (pNtWriteVirtualMemory_t)FindSyscallStub(xorstr_("NtWriteVirtualMemory"));
-    return pFn;
+    static pNtWriteVirtualMemory_t fn = []() -> pNtWriteVirtualMemory_t {
+        void* stub = BuildStubFor(xorstr_("NtWriteVirtualMemory"));
+        if (stub) return reinterpret_cast<pNtWriteVirtualMemory_t>(stub);
+        HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
+        return reinterpret_cast<pNtWriteVirtualMemory_t>(
+            GetProcAddress(ntdll, xorstr_("NtWriteVirtualMemory")));
+        }();
+    return fn;
 }
 
 pNtOpenProcess_t GetNtOpenProcess() {
-    static auto pFn = (pNtOpenProcess_t)FindSyscallStub(xorstr_("NtOpenProcess"));
-    return pFn;
+    static pNtOpenProcess_t fn = []() -> pNtOpenProcess_t {
+        void* stub = BuildStubFor(xorstr_("NtOpenProcess"));
+        if (stub) return reinterpret_cast<pNtOpenProcess_t>(stub);
+        HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
+        return reinterpret_cast<pNtOpenProcess_t>(
+            GetProcAddress(ntdll, xorstr_("NtOpenProcess")));
+        }();
+    return fn;
 }
 
 static pNtDuplicateObject_t GetNtDuplicateObject() {
-    static auto pFn = (pNtDuplicateObject_t)FindSyscallStub(xorstr_("NtDuplicateObject"));
-    return pFn;
+    static pNtDuplicateObject_t fn = []() -> pNtDuplicateObject_t {
+        void* stub = BuildStubFor(xorstr_("NtDuplicateObject"));
+        if (stub) return reinterpret_cast<pNtDuplicateObject_t>(stub);
+        HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
+        return reinterpret_cast<pNtDuplicateObject_t>(
+            GetProcAddress(ntdll, xorstr_("NtDuplicateObject")));
+        }();
+    return fn;
 }
 
 static pNtQuerySystemInformation_t GetNtQuerySystemInformation() {
-    static auto pFn = (pNtQuerySystemInformation_t)FindSyscallStub(xorstr_("NtQuerySystemInformation"));
-    return pFn;
+    static pNtQuerySystemInformation_t fn = []() -> pNtQuerySystemInformation_t {
+        void* stub = BuildStubFor(xorstr_("NtQuerySystemInformation"));
+        if (stub) return reinterpret_cast<pNtQuerySystemInformation_t>(stub);
+        HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
+        return reinterpret_cast<pNtQuerySystemInformation_t>(
+            GetProcAddress(ntdll, xorstr_("NtQuerySystemInformation")));
+        }();
+    return fn;
+}
+
+typedef NTSTATUS(NTAPI* pNtQueryInformationProcess_t)(HANDLE, PROCESSINFOCLASS, PVOID, ULONG, PULONG);
+
+static pNtQueryInformationProcess_t GetNtQueryInformationProcess() {
+    static pNtQueryInformationProcess_t fn = []() -> pNtQueryInformationProcess_t {
+        void* stub = BuildStubFor(xorstr_("NtQueryInformationProcess"));
+        if (stub) return reinterpret_cast<pNtQueryInformationProcess_t>(stub);
+        HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
+        return reinterpret_cast<pNtQueryInformationProcess_t>(
+            GetProcAddress(ntdll, xorstr_("NtQueryInformationProcess")));
+        }();
+    return fn;
 }
 
 typedef struct _SYSTEM_HANDLE_TABLE_ENTRY_INFO {
@@ -261,8 +436,7 @@ HANDLE Memory::TryHijackHandle(DWORD targetPid) {
 
         if (!NT_SUCCESS(dupStatus) || !hDup) continue;
 
-        typedef NTSTATUS(NTAPI* pNtQueryInfoProc)(HANDLE, PROCESSINFOCLASS, PVOID, ULONG, PULONG);
-        static auto NtQueryInfoProc = (pNtQueryInfoProc)FindSyscallStub(xorstr_("NtQueryInformationProcess"));
+        auto NtQueryInfoProc = GetNtQueryInformationProcess();
         if (NtQueryInfoProc) {
             PROCESS_BASIC_INFORMATION pbi = {};
             ULONG ret = 0;
@@ -332,8 +506,7 @@ typedef struct _LDR_DATA_TABLE_ENTRY_FULL {
 uintptr_t Memory::GetModuleBase(const wchar_t* moduleName) const {
     if (!handle) return 0;
 
-    typedef NTSTATUS(NTAPI* pNtQueryInfoProc)(HANDLE, PROCESSINFOCLASS, PVOID, ULONG, PULONG);
-    static auto NtQueryInfoProc = (pNtQueryInfoProc)FindSyscallStub(xorstr_("NtQueryInformationProcess"));
+    auto NtQueryInfoProc = GetNtQueryInformationProcess();
     if (!NtQueryInfoProc) return 0;
 
     PROCESS_BASIC_INFORMATION pbi{};

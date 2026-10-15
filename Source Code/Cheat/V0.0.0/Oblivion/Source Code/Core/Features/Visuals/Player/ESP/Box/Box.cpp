@@ -101,22 +101,24 @@ namespace Features::ESP {
             if (!cfg.enabled || !cfg.boxEnabled) continue;
             if (!ent.isAlive || ent.isDormant) continue;
 
-            Vector2 feetScreen, headScreen;
+            Vector2 feetScreen, headScreen, centerScreen;
             if (!Math::WorldToScreen(ent.feetPos, feetScreen, vm, width, height)) continue;
             if (!Math::WorldToScreen(ent.headPos, headScreen, vm, width, height)) continue;
 
-            const float fxs = feetScreen.x;
-            const float fys = feetScreen.y;
-            const float hxs = headScreen.x;
-            const float hys = headScreen.y;
+            const Vector3 centerWorld = ent.hasBones
+                ? ent.bones[static_cast<int>(BoneIndex::Spine_1)]
+                : ent.origin;
 
-            if (!std::isfinite(fxs) || !std::isfinite(fys) ||
-                !std::isfinite(hxs) || !std::isfinite(hys)) continue;
+            const bool centerOk = Math::WorldToScreen(centerWorld, centerScreen, vm, width, height);
+
+            const float fys = feetScreen.y;
+            const float hys = headScreen.y;
+            const float centerX = centerOk ? centerScreen.x : feetScreen.x;
+
+            if (!std::isfinite(centerX) || !std::isfinite(fys) || !std::isfinite(hys)) continue;
 
             const float rawH = fys - hys;
             if (!(rawH >= 1.0f) || rawH > maxRawH) continue;
-
-            const float centerX = (fxs + hxs) * 0.5f;
 
             if (centerX < -marginX || centerX > fw + marginX) continue;
             if (fys < -marginY || fys > fh + marginY) continue;

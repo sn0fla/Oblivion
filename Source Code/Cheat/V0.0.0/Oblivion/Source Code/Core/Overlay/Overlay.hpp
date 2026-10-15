@@ -27,6 +27,7 @@ public:
         std::wstring targetTitle;
         bool hideWhenTargetInactive = true;
         bool vsync = true;
+        float targetFps = 360.0f;
         int interactKey = VK_INSERT;
         int exitKey = VK_END;
         std::string fontPath;
@@ -87,6 +88,7 @@ private:
     ComPtr<IDCompositionDevice>    dcompDevice_;
     ComPtr<IDCompositionTarget>    dcompTarget_;
     ComPtr<IDCompositionVisual>    dcompVisual_;
+    HANDLE                         waitable_ = nullptr;
 
     UINT width_ = 1;
     UINT height_ = 1;

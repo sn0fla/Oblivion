@@ -32,12 +32,20 @@ namespace Features::ESP {
             if (!ent.isAlive || ent.isDormant) continue;
             if (ent.health == 0 || ent.health > 100) continue;
 
-            Vector2 feetScreen, topScreen;
+            Vector2 feetScreen, topScreen, centerScreen;
             if (!Math::WorldToScreen(ent.feetPos, feetScreen, viewMatrix, width, height)) continue;
             if (!Math::WorldToScreen(ent.headPos, topScreen, viewMatrix, width, height)) continue;
 
-            if (!std::isfinite(feetScreen.x) || !std::isfinite(feetScreen.y) ||
-                !std::isfinite(topScreen.x) || !std::isfinite(topScreen.y)) continue;
+            const Vector3 centerWorld = ent.hasBones
+                ? ent.bones[static_cast<int>(BoneIndex::Spine_1)]
+                : ent.origin;
+
+            const bool centerOk = Math::WorldToScreen(centerWorld, centerScreen, viewMatrix, width, height);
+
+            if (!std::isfinite(feetScreen.y) || !std::isfinite(topScreen.y)) continue;
+
+            const float centerX = centerOk ? centerScreen.x : feetScreen.x;
+            if (!std::isfinite(centerX)) continue;
 
             const float screenH = feetScreen.y - topScreen.y;
             if (screenH < 1.0f) continue;
@@ -56,7 +64,6 @@ namespace Features::ESP {
             if (h > fh * 1.5f) continue;
             if (w > static_cast<float>(width) * 1.5f) continue;
 
-            const float centerX = (feetScreen.x + topScreen.x) * 0.5f;
             const float top = topScreen.y - screenH * kTopMul;
             const float left = centerX - w * 0.5f;
 

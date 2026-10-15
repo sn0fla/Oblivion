@@ -3,6 +3,7 @@
 #include "UI_Header.hpp"
 #include "UI_Stars.hpp"
 #include "UI_Cards.hpp"
+#include "../../SDK/Entities/Entities.hpp"
 #include "../../Utilities/Config/Config.hpp"
 #include "../../External/ImGUI/imgui.h"
 #include <cmath>
@@ -32,9 +33,9 @@ namespace UI {
         float g_subHover[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         float g_subSel[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
 
-        float g_espHover[2][24] = {};
-        float g_espSel[2][24] = {};
-        float g_espColorHover[2][24] = {};
+        float g_espHover[2][27] = {};
+        float g_espSel[2][27] = {};
+        float g_espColorHover[2][27] = {};
 
         bool  g_espExpanded[2] = { false, false };
         float g_espExpandT[2] = { 0.0f, 0.0f };
@@ -43,6 +44,10 @@ namespace UI {
         bool  g_flagsExpanded[2] = { false, false };
         float g_flagsExpandT[2] = { 0.0f, 0.0f };
         float g_flagsExpanderHover[2] = { 0.0f, 0.0f };
+
+        bool  g_offscreenExpanded[2] = { false, false };
+        float g_offscreenExpandT[2] = { 0.0f, 0.0f };
+        float g_offscreenExpanderHover[2] = { 0.0f, 0.0f };
     }
 
     static float  g_linearAnim = 0.0f;
@@ -52,10 +57,309 @@ namespace UI {
 
     static float  g_safeModeHover = 0.0f;
     static float  g_unloadHover = 0.0f;
+    static float  g_diagHover = 0.0f;
+    static bool   g_showDiagnostics = false;
     static bool   g_requestSafeModeConfirm = false;
     static bool   g_requestUnloadConfirm = false;
 
     static constexpr float kMenuAnimDur = 0.10f;
+
+    namespace Diag {
+        static constexpr int kHistSize = 120;
+
+        static float    s_frameHist[kHistSize] = {};
+        static int      s_frameIdx = 0;
+
+        static double   s_accumMs = 0.0;
+        static uint64_t s_accumCount = 0;
+        static double   s_frameAvgMs = 0.0;
+        static double   s_frameMinMs = 0.0;
+        static double   s_frameMaxMs = 0.0;
+        static float    s_fps = 0.0f;
+
+        static double   s_prevPubTime = 0.0;
+        static double   s_snapshotAgeMs = 0.0;
+        static double   s_ageAccum = 0.0;
+        static uint64_t s_ageCount = 0;
+        static double   s_snapshotRateHz = 0.0;
+        static uint64_t s_snapTickCount = 0;
+        static double   s_rateWindowStart = 0.0;
+
+        static double   s_uiAccum = 0.0;
+        static double   s_vmAccum = 0.0;
+        static double   s_swAccum = 0.0;
+        static double   s_espAccum = 0.0;
+        static double   s_cbAccum = 0.0;
+        static double   s_ageAtRenderAccum = 0.0;
+        static uint64_t s_pipeCount = 0;
+
+        static double   s_uiRenderAvgMs = 0.0;
+        static double   s_vmReadAvgMs = 0.0;
+        static double   s_snapWaitAvgMs = 0.0;
+        static double   s_espRenderAvgMs = 0.0;
+        static double   s_renderCbAvgMs = 0.0;
+        static double   s_ageAtRenderAvgMs = 0.0;
+        static int      s_entityCount = 0;
+
+        static double   s_overlayPresentAccum = 0.0;
+        static double   s_overlayFrameAccum = 0.0;
+        static double   s_overlayPresentAvgMs = 0.0;
+        static double   s_overlayFrameAvgMs = 0.0;
+
+        static ImU32 ColorForMs(double ms, double goodMs, double badMs) {
+            if (ms <= goodMs) return IM_COL32(140, 230, 150, 255);
+            if (ms >= badMs)  return IM_COL32(240, 130, 130, 255);
+            return IM_COL32(240, 210, 130, 255);
+        }
+
+        static void Tick(float dt) {
+            if (dt <= 0.0f) return;
+
+            const double ms = static_cast<double>(dt) * 1000.0;
+            s_fps = static_cast<float>(1.0 / static_cast<double>(dt));
+
+            s_frameHist[s_frameIdx] = static_cast<float>(ms);
+            s_frameIdx = (s_frameIdx + 1) % kHistSize;
+
+            s_accumMs += ms;
+            s_accumCount++;
+            if (s_accumMs > 500.0) {
+                s_frameAvgMs = s_accumMs / static_cast<double>(s_accumCount);
+                s_accumMs = 0.0;
+                s_accumCount = 0;
+            }
+
+            double mn = 1e9, mx = 0.0;
+            for (int i = 0; i < kHistSize; ++i) {
+                const float v = s_frameHist[i];
+                if (v <= 0.0f) continue;
+                if (static_cast<double>(v) < mn) mn = static_cast<double>(v);
+                if (static_cast<double>(v) > mx) mx = static_cast<double>(v);
+            }
+            s_frameMinMs = (mn < 1e8) ? mn : 0.0;
+            s_frameMaxMs = mx;
+
+            const double now = FrameTime();
+            const double pub = GetLastSnapshotPublishTime();
+
+            if (pub > 0.0 && pub != s_prevPubTime) {
+                s_prevPubTime = pub;
+                s_snapTickCount++;
+                if (s_rateWindowStart == 0.0) s_rateWindowStart = now;
+
+                const double span = now - s_rateWindowStart;
+                if (span >= 0.5) {
+                    s_snapshotRateHz = static_cast<double>(s_snapTickCount) / span;
+                    s_snapTickCount = 0;
+                    s_rateWindowStart = now;
+                }
+            }
+
+            if (pub > 0.0) {
+                const double age = (now - pub) * 1000.0;
+                s_ageAccum += age;
+                s_ageCount++;
+                if (s_ageCount >= 30) {
+                    s_snapshotAgeMs = s_ageAccum / static_cast<double>(s_ageCount);
+                    s_ageAccum = 0.0;
+                    s_ageCount = 0;
+                }
+            }
+
+            s_uiAccum += g_uiRenderMs.load(std::memory_order_relaxed);
+            s_vmAccum += g_viewMatrixReadMs.load(std::memory_order_relaxed);
+            s_swAccum += g_snapshotWaitMs.load(std::memory_order_relaxed);
+            s_espAccum += g_espRenderMs.load(std::memory_order_relaxed);
+            s_cbAccum += g_renderCallbackMs.load(std::memory_order_relaxed);
+            s_ageAtRenderAccum += g_snapshotAgeAtRenderMs.load(std::memory_order_relaxed);
+            s_entityCount = g_renderEntityCount.load(std::memory_order_relaxed);
+
+            s_overlayPresentAccum += g_overlayPresentLatencyMs.load(std::memory_order_relaxed);
+            s_overlayFrameAccum += g_overlayFrameTimeMs.load(std::memory_order_relaxed);
+
+            s_pipeCount++;
+
+            if (s_pipeCount >= 30) {
+                const double n = static_cast<double>(s_pipeCount);
+                s_uiRenderAvgMs = s_uiAccum / n;
+                s_vmReadAvgMs = s_vmAccum / n;
+                s_snapWaitAvgMs = s_swAccum / n;
+                s_espRenderAvgMs = s_espAccum / n;
+                s_renderCbAvgMs = s_cbAccum / n;
+                s_ageAtRenderAvgMs = s_ageAtRenderAccum / n;
+                s_uiAccum = 0.0;
+                s_vmAccum = 0.0;
+                s_swAccum = 0.0;
+                s_espAccum = 0.0;
+                s_cbAccum = 0.0;
+                s_ageAtRenderAccum = 0.0;
+
+                s_overlayPresentAvgMs = s_overlayPresentAccum / n;
+                s_overlayFrameAvgMs = s_overlayFrameAccum / n;
+                s_overlayPresentAccum = 0.0;
+                s_overlayFrameAccum = 0.0;
+
+                s_pipeCount = 0;
+            }
+        }
+
+        static void Row(const char* label, const char* value, ImU32 valueCol) {
+            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(160, 155, 195, 255));
+            ImGui::TextUnformatted(label);
+            ImGui::PopStyleColor();
+            ImGui::SameLine(160.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, valueCol);
+            ImGui::TextUnformatted(value);
+            ImGui::PopStyleColor();
+        }
+
+        static void SectionHeader(const char* title) {
+            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(190, 180, 245, 255));
+            ImGui::TextUnformatted(title);
+            ImGui::PopStyleColor();
+            ImGui::Separator();
+        }
+
+        static void RenderWindow() {
+            if (!g_showDiagnostics) return;
+
+            ImGui::SetNextWindowSize(ImVec2(380.0f, 0.0f), ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowPos(ImVec2(24.0f, 24.0f), ImGuiCond_FirstUseEver);
+
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.055f, 0.055f, 0.075f, 0.95f));
+            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.741f, 0.690f, 1.0f, 0.45f));
+            ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.08f, 0.08f, 0.11f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.10f, 0.10f, 0.14f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.88f, 0.86f, 1.0f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.741f, 0.690f, 1.0f, 0.25f));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 10.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 4.0f));
+
+            if (ImGui::Begin("Diagnostics", &g_showDiagnostics,
+                ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
+
+                char buf[96];
+
+                SectionHeader("Render");
+
+                snprintf(buf, sizeof(buf), "%.1f", static_cast<double>(s_fps));
+                Row("FPS", buf, ColorForMs(s_fps > 1.0f ? 1000.0 / static_cast<double>(s_fps) : 9999.0, 8.0, 25.0));
+
+                snprintf(buf, sizeof(buf), "%.2f ms", s_frameAvgMs);
+                Row("Frame avg", buf, ColorForMs(s_frameAvgMs, 8.0, 25.0));
+
+                snprintf(buf, sizeof(buf), "%.2f ms", s_frameMinMs);
+                Row("Frame min", buf, IM_COL32(200, 195, 235, 255));
+
+                snprintf(buf, sizeof(buf), "%.2f ms", s_frameMaxMs);
+                Row("Frame max", buf, ColorForMs(s_frameMaxMs, 16.0, 40.0));
+
+                snprintf(buf, sizeof(buf), "%.2f ms", s_renderCbAvgMs);
+                Row("Render callback", buf, ColorForMs(s_renderCbAvgMs, 4.0, 14.0));
+
+                {
+                    double present = s_frameAvgMs - s_renderCbAvgMs;
+                    if (present < 0.0) present = 0.0;
+                    snprintf(buf, sizeof(buf), "%.2f ms", present);
+                    Row("Present / other", buf, ColorForMs(present, 6.0, 16.0));
+                }
+
+                ImGui::Spacing();
+                SectionHeader("Render breakdown");
+
+                snprintf(buf, sizeof(buf), "%.2f ms", s_uiRenderAvgMs);
+                Row("UI render", buf, ColorForMs(s_uiRenderAvgMs, 1.5, 5.0));
+
+                snprintf(buf, sizeof(buf), "%.2f ms", s_vmReadAvgMs);
+                Row("View matrix read", buf, ColorForMs(s_vmReadAvgMs, 0.5, 3.0));
+
+                snprintf(buf, sizeof(buf), "%.2f ms", s_snapWaitAvgMs);
+                Row("Snapshot lock wait", buf, ColorForMs(s_snapWaitAvgMs, 0.5, 3.0));
+
+                snprintf(buf, sizeof(buf), "%.2f ms", s_espRenderAvgMs);
+                Row("ESP render", buf, ColorForMs(s_espRenderAvgMs, 2.0, 8.0));
+
+                {
+                    double other = s_renderCbAvgMs - s_uiRenderAvgMs - s_vmReadAvgMs - s_snapWaitAvgMs - s_espRenderAvgMs;
+                    if (other < 0.0) other = 0.0;
+                    snprintf(buf, sizeof(buf), "%.2f ms", other);
+                    Row("Callback other", buf, ColorForMs(other, 1.0, 4.0));
+                }
+
+                ImGui::Spacing();
+                SectionHeader("Entity thread");
+
+                const double hz = GetEntityThreadHz();
+                const double build = GetEntityThreadLastBuildMs();
+
+                snprintf(buf, sizeof(buf), "%.1f Hz", hz);
+                Row("Iteration rate", buf, ColorForMs(hz > 0.0 ? 1000.0 / hz : 9999.0, 8.0, 25.0));
+
+                snprintf(buf, sizeof(buf), "%.3f ms", build);
+                Row("Build time", buf, ColorForMs(build, 3.0, 12.0));
+
+                {
+                    const uint64_t iters = GetEntityThreadIterations();
+                    snprintf(buf, sizeof(buf), "%llu", static_cast<unsigned long long>(iters));
+                    Row("Total iterations", buf, IM_COL32(200, 195, 235, 255));
+                }
+
+                snprintf(buf, sizeof(buf), "%d", s_entityCount);
+                Row("Entities in frame", buf, IM_COL32(200, 195, 235, 255));
+
+                ImGui::Spacing();
+                SectionHeader("Snapshot");
+
+                snprintf(buf, sizeof(buf), "%.1f Hz", s_snapshotRateHz);
+                Row("Publish rate", buf, ColorForMs(s_snapshotRateHz > 0.0 ? 1000.0 / s_snapshotRateHz : 9999.0, 8.0, 25.0));
+
+                snprintf(buf, sizeof(buf), "%.2f ms", s_ageAtRenderAvgMs);
+                Row("Age at render", buf, ColorForMs(s_ageAtRenderAvgMs, 8.0, 25.0));
+
+                snprintf(buf, sizeof(buf), "%.2f ms", s_snapshotAgeMs);
+                Row("Age (UI tick)", buf, ColorForMs(s_snapshotAgeMs, 8.0, 25.0));
+
+                ImGui::Spacing();
+                SectionHeader("Overlay");
+
+                snprintf(buf, sizeof(buf), "%.2f ms", s_overlayPresentAvgMs);
+                Row("Data -> Present", buf, ColorForMs(s_overlayPresentAvgMs, 5.0, 15.0));
+
+                snprintf(buf, sizeof(buf), "%.2f ms", s_overlayFrameAvgMs);
+                Row("Overlay frame time", buf, ColorForMs(s_overlayFrameAvgMs, 4.0, 12.0));
+
+                ImGui::Spacing();
+                SectionHeader("Pipeline");
+
+                {
+                    double toEsp = s_ageAtRenderAvgMs + s_espRenderAvgMs;
+                    snprintf(buf, sizeof(buf), "%.2f ms", toEsp);
+                    Row("Entity -> ESP", buf, ColorForMs(toEsp, 15.0, 40.0));
+                }
+                {
+                    double toCb = s_ageAtRenderAvgMs + s_renderCbAvgMs;
+                    snprintf(buf, sizeof(buf), "%.2f ms", toCb);
+                    Row("Entity -> callback end", buf, ColorForMs(toCb, 20.0, 50.0));
+                }
+                {
+                    double toScreen = s_ageAtRenderAvgMs + s_frameAvgMs;
+                    snprintf(buf, sizeof(buf), "%.2f ms", toScreen);
+                    Row("Entity -> screen (est)", buf, ColorForMs(toScreen, 25.0, 60.0));
+                }
+                {
+                    double total = s_frameAvgMs + s_snapshotAgeMs + build;
+                    snprintf(buf, sizeof(buf), "%.2f ms", total);
+                    Row("Legacy total", buf, ColorForMs(total, 20.0, 50.0));
+                }
+            }
+            ImGui::End();
+
+            ImGui::PopStyleVar(4);
+            ImGui::PopStyleColor(6);
+        }
+    }
 
     static float* GetEspColorPtr(int sub, int idx) {
         if (sub == 0) {
@@ -80,6 +384,7 @@ namespace UI {
             case 21: return config.esp_enemy_flags_reloading_color;
             case 22: return config.esp_enemy_flags_money_color;
             case 23: return config.esp_enemy_flags_ammo_color;
+            case 24: return config.esp_enemy_offscreen_color;
             default: return nullptr;
             }
         }
@@ -105,6 +410,7 @@ namespace UI {
             case 21: return config.esp_team_flags_reloading_color;
             case 22: return config.esp_team_flags_money_color;
             case 23: return config.esp_team_flags_ammo_color;
+            case 24: return config.esp_team_offscreen_color;
             default: return nullptr;
             }
         }
@@ -594,67 +900,120 @@ namespace UI {
 
         const float cp = 14.0f * s;
         const float rowH = 22.0f * s;
+        const float rowGap = 6.0f * s;
 
         const float cbSize = 18.0f * s;
         const float cbX1 = cmax.x - cp;
         const float cbX0 = cbX1 - cbSize;
-        const float rowY = cmin.y + cp;
-        const float cbY0 = rowY + (rowH - cbSize) * 0.5f;
-        const float cbY1 = cbY0 + cbSize;
+
+        const float row1Y = cmin.y + cp;
+        const float cb1Y0 = row1Y + (rowH - cbSize) * 0.5f;
+        const float cb1Y1 = cb1Y0 + cbSize;
+
+        const float row2Y = row1Y + rowH + rowGap;
+        const float cb2Y0 = row2Y + (rowH - cbSize) * 0.5f;
+        const float cb2Y1 = cb2Y0 + cbSize;
 
         const ImVec2 mouse = ImGui::GetIO().MousePos;
         const bool interactive = (a > 0.99f);
 
         const bool safeCbHovered = interactive
             && mouse.x >= cbX0 && mouse.x <= cbX1
-            && mouse.y >= cbY0 && mouse.y <= cbY1;
+            && mouse.y >= cb1Y0 && mouse.y <= cb1Y1;
+
+        const bool diagCbHovered = interactive
+            && mouse.x >= cbX0 && mouse.x <= cbX1
+            && mouse.y >= cb2Y0 && mouse.y <= cb2Y1;
 
         const float kApproach = 1.0f - expf(-18.0f * dt);
         g_safeModeHover += ((safeCbHovered ? 1.0f : 0.0f) - g_safeModeHover) * kApproach;
+        g_diagHover += ((diagCbHovered ? 1.0f : 0.0f) - g_diagHover) * kApproach;
 
-        const bool safeEnabled = config.safe_mode;
-        const float safeSelT = safeEnabled ? 1.0f : 0.0f;
-        const float safeSt = (safeSelT > g_safeModeHover) ? safeSelT : g_safeModeHover;
+        {
+            const bool safeEnabled = config.safe_mode;
+            const float safeSelT = safeEnabled ? 1.0f : 0.0f;
+            const float safeSt = (safeSelT > g_safeModeHover) ? safeSelT : g_safeModeHover;
 
-        const int mR = (int)(120 + (189 - 120) * safeSt);
-        const int mG = (int)(110 + (176 - 110) * safeSt);
-        const int mB = (int)(180 + (255 - 180) * safeSt);
-        const int mFillA = (int)(cardAlpha * (0.35f + 0.65f * safeSelT) * 255.0f);
-        const int mRingA = (int)(cardAlpha * 0.55f * g_safeModeHover * 255.0f);
+            const int mR = (int)(120 + (189 - 120) * safeSt);
+            const int mG = (int)(110 + (176 - 110) * safeSt);
+            const int mB = (int)(180 + (255 - 180) * safeSt);
+            const int mFillA = (int)(cardAlpha * (0.35f + 0.65f * safeSelT) * 255.0f);
+            const int mRingA = (int)(cardAlpha * 0.55f * g_safeModeHover * 255.0f);
 
-        dl->AddRectFilled(ImVec2(cbX0, cbY0), ImVec2(cbX1, cbY1),
-            IM_COL32(mR, mG, mB, mFillA), 4.0f * s);
+            dl->AddRectFilled(ImVec2(cbX0, cb1Y0), ImVec2(cbX1, cb1Y1),
+                IM_COL32(mR, mG, mB, mFillA), 4.0f * s);
 
-        if (mRingA > 2) {
-            dl->AddRect(ImVec2(cbX0, cbY0), ImVec2(cbX1, cbY1),
-                IM_COL32(mR, mG, mB, mRingA), 4.0f * s, 0, 1.5f * s);
-        }
-
-        if (font) {
-            const char* lbl = "Safemode";
-            const ImVec2 lsz = font->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, lbl);
-            const float lx = cmin.x + cp;
-            const float ly = rowY + (rowH - lsz.y) * 0.5f;
-
-            const int lr = (int)(190 + (235 - 190) * safeSt);
-            const int lg = (int)(185 + (228 - 185) * safeSt);
-            const int lb = (int)(215 + (255 - 215) * safeSt);
-
-            dl->AddText(font, labelFs,
-                ImVec2(floorf(lx + 0.5f), floorf(ly + 0.5f)),
-                IM_COL32(lr, lg, lb, (int)(cardAlpha * 255.0f)), lbl);
-        }
-
-        if (safeCbHovered && ImGui::IsMouseClicked(0)) {
-            Internal::PlayClickSound();
-            if (safeEnabled) {
-                if (config.safe_mode_no_warn)
-                    config.safe_mode = false;
-                else
-                    g_requestSafeModeConfirm = true;
+            if (mRingA > 2) {
+                dl->AddRect(ImVec2(cbX0, cb1Y0), ImVec2(cbX1, cb1Y1),
+                    IM_COL32(mR, mG, mB, mRingA), 4.0f * s, 0, 1.5f * s);
             }
-            else {
-                config.safe_mode = true;
+
+            if (font) {
+                const char* lbl = "Safemode";
+                const ImVec2 lsz = font->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, lbl);
+                const float lx = cmin.x + cp;
+                const float ly = row1Y + (rowH - lsz.y) * 0.5f;
+
+                const int lr = (int)(190 + (235 - 190) * safeSt);
+                const int lg = (int)(185 + (228 - 185) * safeSt);
+                const int lb = (int)(215 + (255 - 215) * safeSt);
+
+                dl->AddText(font, labelFs,
+                    ImVec2(floorf(lx + 0.5f), floorf(ly + 0.5f)),
+                    IM_COL32(lr, lg, lb, (int)(cardAlpha * 255.0f)), lbl);
+            }
+
+            if (safeCbHovered && ImGui::IsMouseClicked(0)) {
+                Internal::PlayClickSound();
+                if (safeEnabled) {
+                    if (config.safe_mode_no_warn)
+                        config.safe_mode = false;
+                    else
+                        g_requestSafeModeConfirm = true;
+                }
+                else {
+                    config.safe_mode = true;
+                }
+            }
+        }
+
+        {
+            const bool diagEnabled = g_showDiagnostics;
+            const float diagSelT = diagEnabled ? 1.0f : 0.0f;
+            const float diagSt = (diagSelT > g_diagHover) ? diagSelT : g_diagHover;
+
+            const int mR = (int)(120 + (189 - 120) * diagSt);
+            const int mG = (int)(110 + (176 - 110) * diagSt);
+            const int mB = (int)(180 + (255 - 180) * diagSt);
+            const int mFillA = (int)(cardAlpha * (0.35f + 0.65f * diagSelT) * 255.0f);
+            const int mRingA = (int)(cardAlpha * 0.55f * g_diagHover * 255.0f);
+
+            dl->AddRectFilled(ImVec2(cbX0, cb2Y0), ImVec2(cbX1, cb2Y1),
+                IM_COL32(mR, mG, mB, mFillA), 4.0f * s);
+
+            if (mRingA > 2) {
+                dl->AddRect(ImVec2(cbX0, cb2Y0), ImVec2(cbX1, cb2Y1),
+                    IM_COL32(mR, mG, mB, mRingA), 4.0f * s, 0, 1.5f * s);
+            }
+
+            if (font) {
+                const char* lbl = "Diagnostics";
+                const ImVec2 lsz = font->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, lbl);
+                const float lx = cmin.x + cp;
+                const float ly = row2Y + (rowH - lsz.y) * 0.5f;
+
+                const int lr = (int)(190 + (235 - 190) * diagSt);
+                const int lg = (int)(185 + (228 - 185) * diagSt);
+                const int lb = (int)(215 + (255 - 215) * diagSt);
+
+                dl->AddText(font, labelFs,
+                    ImVec2(floorf(lx + 0.5f), floorf(ly + 0.5f)),
+                    IM_COL32(lr, lg, lb, (int)(cardAlpha * 255.0f)), lbl);
+            }
+
+            if (diagCbHovered && ImGui::IsMouseClicked(0)) {
+                Internal::PlayClickSound();
+                g_showDiagnostics = !g_showDiagnostics;
             }
         }
 
@@ -837,6 +1196,143 @@ namespace UI {
         PopWarningPopupStyle();
     }
 
+    static void DrawDashedSlider(ImDrawList* dl, const Cards::Rect& r, float* val,
+        float vmin, float vmax, float alpha, float s, const char* id)
+    {
+        const float w = r.max.x - r.min.x;
+        const float h = r.max.y - r.min.y;
+        if (w < 8.0f || h < 4.0f) return;
+
+        ImGui::SetCursorScreenPos(r.min);
+        ImGui::InvisibleButton(id, ImVec2(w, h));
+
+        const bool active = ImGui::IsItemActive();
+        const bool hovered = ImGui::IsItemHovered();
+
+        if (active) {
+            const float mx = ImGui::GetIO().MousePos.x;
+            float t = (mx - r.min.x) / w;
+            if (t < 0.0f) t = 0.0f;
+            if (t > 1.0f) t = 1.0f;
+            *val = vmin + (vmax - vmin) * t;
+        }
+
+        float t = (*val - vmin) / (vmax - vmin);
+        if (t < 0.0f) t = 0.0f;
+        if (t > 1.0f) t = 1.0f;
+
+        const float cy = (r.min.y + r.max.y) * 0.5f;
+        const float trackH = (std::max)(1.5f, 2.0f * s);
+        const float trackY0 = cy - trackH * 0.5f;
+        const float trackY1 = cy + trackH * 0.5f;
+
+        const int a8 = (int)(alpha * 255.0f);
+
+        dl->AddRectFilled(
+            ImVec2(r.min.x, trackY0),
+            ImVec2(r.max.x, trackY1),
+            IM_COL32(28, 28, 38, a8), trackH * 0.5f);
+
+        const float fillX = r.min.x + w * t;
+        dl->AddRectFilled(
+            ImVec2(r.min.x, trackY0),
+            ImVec2(fillX, trackY1),
+            IM_COL32(189, 176, 255, a8), trackH * 0.5f);
+
+        const float filledW = fillX - r.min.x;
+
+        if (active && filledW > 4.0f) {
+            const float time = (float)ImGui::GetTime();
+
+            const int kPulses = 3;
+            const float pulseWidth = filledW * 0.55f;
+            const float travelSpan = filledW + pulseWidth;
+            const float speed = travelSpan * 0.9f;
+            const float baseCycle = fmodf(time * speed, travelSpan);
+
+            const ImU32 baseCol = IM_COL32(0, 0, 0, 0);
+            const ImU32 glowCol = IM_COL32(160, 140, 255, (int)(alpha * 255.0f));
+            const ImU32 coreCol = IM_COL32(235, 228, 255, (int)(alpha * 255.0f));
+
+            for (int p = 0; p < kPulses; ++p) {
+                const float offset = (travelSpan / (float)kPulses) * (float)p;
+                const float cycle = fmodf(baseCycle + offset, travelSpan);
+                const float u = cycle / travelSpan;
+                const float eased = u * u * (3.0f - 2.0f * u);
+                const float pulsePos = eased * travelSpan - pulseWidth;
+
+                Internal::DrawFlowLine(dl,
+                    ImVec2(r.min.x, cy),
+                    ImVec2(fillX, cy),
+                    baseCol, glowCol, coreCol,
+                    (std::max)(1.0f, 1.0f * s), pulsePos, pulseWidth);
+            }
+        }
+
+        const float handleR = (std::max)(1.8f, (active || hovered) ? 3.2f * s : 2.6f * s);
+        dl->AddCircleFilled(ImVec2(fillX, cy), handleR,
+            IM_COL32(235, 228, 255, a8), 16);
+    }
+
+    static void PlaceOffscreenSliders(ImDrawList* dl, ImVec2 drawMin, ImVec2 drawMax,
+        float expandBox, float expandFlags, float expandOffscreen,
+        float s, int curSub, float a, ImFont* font, float labelFs)
+    {
+        if (a < 0.5f) return;
+        if (expandOffscreen < 0.01f) return;
+
+        static const char* s_ids[2] = { "##offs_dist", "##offs_size" };
+
+        for (int k = 0; k < 2; ++k) {
+            const int idx = 25 + k;
+
+            const float rowA = Cards::RowAlpha(idx, expandBox, expandFlags, expandOffscreen);
+            if (rowA < 0.01f) continue;
+
+            float* valPtr = nullptr;
+            float vmin = 0.0f;
+            float vmax = 1.0f;
+            char buf[32] = {};
+
+            if (k == 0) {
+                valPtr = (curSub == 0)
+                    ? &config.esp_enemy_offscreen_distance
+                    : &config.esp_team_offscreen_distance;
+                vmin = 0.15f;
+                vmax = 0.95f;
+                snprintf(buf, sizeof(buf), "%.2f", *valPtr);
+            }
+            else {
+                valPtr = (curSub == 0)
+                    ? &config.esp_enemy_offscreen_size
+                    : &config.esp_team_offscreen_size;
+                vmin = 12.0f;
+                vmax = 50.0f;
+                snprintf(buf, sizeof(buf), "%.0f", *valPtr);
+            }
+
+            const float alpha = a * rowA;
+
+            if (font) {
+                const float labelCy = Cards::RowCenterY(drawMin, idx, expandBox, expandFlags,
+                    expandOffscreen, s);
+                const ImVec2 tsz = font->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, buf);
+                const float tx = drawMax.x - 14.0f * s - tsz.x;
+                const float ty = labelCy - tsz.y * 0.5f;
+                dl->AddText(font, labelFs,
+                    ImVec2(floorf(tx + 0.5f), floorf(ty + 0.5f)),
+                    IM_COL32(200, 190, 240, (int)(alpha * 255.0f)), buf);
+            }
+
+            Cards::Rect sr = Cards::GetSliderRect(
+                drawMin, drawMax, idx, expandBox, expandFlags, expandOffscreen, s);
+
+            if (sr.max.x - sr.min.x < 16.0f) continue;
+
+            DrawDashedSlider(dl, sr, valPtr, vmin, vmax, alpha, s, s_ids[k]);
+        }
+    }
+
     void Render(ID3D11Device* device, ID3D11DeviceContext* context, int width, int height) {
         (void)device; (void)context; (void)width; (void)height;
 
@@ -847,6 +1343,8 @@ namespace UI {
         float dt = io.DeltaTime;
         if (dt > 0.05f) dt = 0.05f;
         if (dt < 0.0f)  dt = 0.0f;
+
+        Diag::Tick(dt);
 
         const bool open = config.show_menu;
 
@@ -994,14 +1492,13 @@ namespace UI {
             vals[21] = (curSub == 0) ? &config.esp_enemy_flags_reloading : &config.esp_team_flags_reloading;
             vals[22] = (curSub == 0) ? &config.esp_enemy_flags_money : &config.esp_team_flags_money;
             vals[23] = (curSub == 0) ? &config.esp_enemy_flags_ammo : &config.esp_team_flags_ammo;
-
-            const float expandBox = Internal::g_espExpandT[curSub];
-            const float expandFlags = Internal::g_flagsExpandT[curSub];
+            vals[24] = (curSub == 0) ? &config.esp_enemy_offscreen : &config.esp_team_offscreen;
+            vals[25] = nullptr;
+            vals[26] = nullptr;
 
             const ImVec2 mouse = io.MousePos;
             const float kApproach = 1.0f - expf(-18.0f * dt);
 
-            // Card background + border drawn on parent list so it stays behind scrolled content
             {
                 const int bgA = (int)(contentAlpha * 255.0f);
                 const int borderA = (int)(contentAlpha * 70.0f);
@@ -1026,18 +1523,25 @@ namespace UI {
             ImGui::BeginChild("##esp_scroll", ImVec2(cardW, cardH), false,
                 ImGuiWindowFlags_NoSavedSettings);
 
-            // Reserve scrollable content height based on visible rows.
-            constexpr float kRowH = 24.0f;
-            constexpr float kTopOff = 8.0f;
-            const float totalRows = 2.0f + 4.0f * expandBox + 9.0f + 9.0f * expandFlags;
-            const float contentHeight = (kTopOff + totalRows * kRowH + 14.0f) * s;
+            const float contentHeight = Cards::ContentHeight(
+                Internal::g_espExpandT[curSub],
+                Internal::g_flagsExpandT[curSub],
+                Internal::g_offscreenExpandT[curSub]) * s;
             ImGui::Dummy(ImVec2(cardW, contentHeight));
+
+            const float expandBox = Internal::g_espExpandT[curSub];
+            const float expandFlags = Internal::g_flagsExpandT[curSub];
+            const float expandOffscreen = Internal::g_offscreenExpandT[curSub];
 
             const float scrollY = ImGui::GetScrollY();
             const ImVec2 drawMin(c0min.x, c0min.y - scrollY);
             const ImVec2 drawMax(c0max.x, c0max.y - scrollY);
 
             ImDrawList* cdl = ImGui::GetWindowDrawList();
+
+            PlaceOffscreenSliders(cdl, drawMin, drawMax, expandBox, expandFlags,
+                expandOffscreen, s, curSub, a, font, labelFs);
+
             cdl->PushClipRect(c0min, c0max, true);
 
             const bool mouseInCard = (a > 0.99f)
@@ -1045,11 +1549,12 @@ namespace UI {
                 && mouse.y >= c0min.y && mouse.y <= c0max.y;
 
             for (int i = 0; i < Cards::kEspItemCount; ++i) {
-                const float rowA = Cards::RowAlpha(i, expandBox, expandFlags);
+                if (Cards::IsSliderRow(i)) continue;
+                const float rowA = Cards::RowAlpha(i, expandBox, expandFlags, expandOffscreen);
                 const bool interactive = mouseInCard && (rowA > 0.5f);
 
                 Cards::Rect cb = Cards::GetCheckboxRect(
-                    drawMin, drawMax, i, expandBox, expandFlags, s);
+                    drawMin, drawMax, i, expandBox, expandFlags, expandOffscreen, s);
 
                 const bool hov = interactive
                     && mouse.x >= cb.min.x && mouse.x <= cb.max.x
@@ -1069,7 +1574,8 @@ namespace UI {
             static char s_popupId[Cards::kEspItemCount][32] = {};
 
             for (int i = 0; i < Cards::kEspItemCount; ++i) {
-                const float rowA = Cards::RowAlpha(i, expandBox, expandFlags);
+                if (Cards::IsSliderRow(i)) continue;
+                const float rowA = Cards::RowAlpha(i, expandBox, expandFlags, expandOffscreen);
                 const bool interactive = mouseInCard && (rowA > 0.5f);
 
                 bool colorHov = false;
@@ -1078,7 +1584,7 @@ namespace UI {
 
                 if (colorPtr) {
                     Cards::Rect cr = Cards::GetColorRect(
-                        drawMin, drawMax, i, expandBox, expandFlags, s);
+                        drawMin, drawMax, i, expandBox, expandFlags, expandOffscreen, s);
 
                     colorHov = interactive
                         && mouse.x >= cr.min.x && mouse.x <= cr.max.x
@@ -1114,7 +1620,7 @@ namespace UI {
             }
 
             Cards::Rect ex = Cards::GetExpanderRect(drawMin, drawMax, s,
-                expandBox, expandFlags, font, labelFs);
+                expandBox, expandFlags, expandOffscreen, font, labelFs);
             const bool exHov = mouseInCard
                 && mouse.x >= ex.min.x && mouse.x <= ex.max.x
                 && mouse.y >= ex.min.y && mouse.y <= ex.max.y;
@@ -1132,7 +1638,7 @@ namespace UI {
                 (targetBox - Internal::g_espExpandT[curSub]) * kApproach;
 
             Cards::Rect fex = Cards::GetFlagsExpanderRect(drawMin, drawMax, s,
-                expandBox, font, labelFs);
+                expandBox, expandFlags, expandOffscreen, font, labelFs);
             const bool fexHov = mouseInCard
                 && mouse.x >= fex.min.x && mouse.x <= fex.max.x
                 && mouse.y >= fex.min.y && mouse.y <= fex.max.y;
@@ -1149,6 +1655,24 @@ namespace UI {
             Internal::g_flagsExpandT[curSub] +=
                 (targetFlags - Internal::g_flagsExpandT[curSub]) * kApproach;
 
+            Cards::Rect oex = Cards::GetOffscreenExpanderRect(drawMin, drawMax, s,
+                expandBox, expandFlags, expandOffscreen, font, labelFs);
+            const bool oexHov = mouseInCard
+                && mouse.x >= oex.min.x && mouse.x <= oex.max.x
+                && mouse.y >= oex.min.y && mouse.y <= oex.max.y;
+
+            if (oexHov && ImGui::IsMouseClicked(0)) {
+                Internal::PlayClickSound();
+                Internal::g_offscreenExpanded[curSub] = !Internal::g_offscreenExpanded[curSub];
+            }
+
+            Internal::g_offscreenExpanderHover[curSub] +=
+                ((oexHov ? 1.0f : 0.0f) - Internal::g_offscreenExpanderHover[curSub]) * kApproach;
+
+            const float targetOffscreen = Internal::g_offscreenExpanded[curSub] ? 1.0f : 0.0f;
+            Internal::g_offscreenExpandT[curSub] +=
+                (targetOffscreen - Internal::g_offscreenExpandT[curSub]) * kApproach;
+
             const float* colorPtrs[Cards::kEspItemCount] = {};
             for (int i = 0; i < Cards::kEspItemCount; ++i) {
                 if (Cards::HasColor(i))
@@ -1164,6 +1688,8 @@ namespace UI {
                 Internal::g_espExpanderHover[curSub],
                 Internal::g_flagsExpandT[curSub],
                 Internal::g_flagsExpanderHover[curSub],
+                Internal::g_offscreenExpandT[curSub],
+                Internal::g_offscreenExpanderHover[curSub],
                 font, labelFs, s,
                 false);
 
@@ -1245,6 +1771,8 @@ namespace UI {
 
         ImGui::PopStyleVar(4);
         ImGui::PopStyleColor(2);
+
+        Diag::RenderWindow();
     }
 
     bool IsOpen() { return config.show_menu; }

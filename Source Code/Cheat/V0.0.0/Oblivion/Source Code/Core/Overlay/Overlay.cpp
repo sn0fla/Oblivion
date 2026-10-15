@@ -5,6 +5,7 @@
 
 #include <avrt.h>
 #include <cstdio>
+#include <atomic>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -13,8 +14,12 @@
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+extern double FrameTime();
+extern double GetLastSnapshotPublishTime();
+extern std::atomic<double> g_overlayPresentLatencyMs;
+extern std::atomic<double> g_overlayFrameTimeMs;
+
 static constexpr wchar_t kClassName[] = L"ExternalOverlayWnd";
-static int s_geometryTick = 0;
 
 bool Overlay::Fail(const char* what, HRESULT hr)
 {
@@ -56,7 +61,7 @@ bool Overlay::CreateOverlayWindow()
 
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
-    wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = WndProcStatic;
     wc.hInstance = hInst_;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
@@ -146,7 +151,7 @@ bool Overlay::CreateSwapchainAndComposition()
     sd.Scaling = DXGI_SCALING_STRETCH;
     sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     sd.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
-    sd.Flags = 0;
+    sd.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
     ComPtr<IDXGISwapChain1> sc1;
     hr = factory->CreateSwapChainForComposition(device_.Get(), &sd, nullptr, &sc1);
@@ -156,6 +161,7 @@ bool Overlay::CreateSwapchainAndComposition()
     if (FAILED(hr)) return Fail("QueryInterface(IDXGISwapChain2) failed", hr);
 
     swapchain_->SetMaximumFrameLatency(1);
+    waitable_ = swapchain_->GetFrameLatencyWaitableObject();
 
     hr = DCompositionCreateDevice(dxgiDev.Get(), IID_PPV_ARGS(&dcompDevice_));
     if (FAILED(hr)) return Fail("DCompositionCreateDevice failed", hr);
@@ -228,6 +234,7 @@ void Overlay::Shutdown()
     dcompTarget_.Reset();
     dcompDevice_.Reset();
     swapchain_.Reset();
+    waitable_ = nullptr;
     ctx_.Reset();
     device_.Reset();
 
@@ -250,10 +257,27 @@ void Overlay::SetInteractive(bool on)
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
     ImGuiIO& io = ImGui::GetIO();
+
     if (on)
     {
         io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+
+        const HWND fg = GetForegroundWindow();
+        const DWORD fgThread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
+        const DWORD myThread = GetCurrentThreadId();
+        const bool attached = (fgThread != 0 && fgThread != myThread);
+
+        if (attached)
+            AttachThreadInput(fgThread, myThread, TRUE);
+
+        BringWindowToTop(hwnd_);
         SetForegroundWindow(hwnd_);
+        SetFocus(hwnd_);
+
+        if (attached)
+            AttachThreadInput(fgThread, myThread, FALSE);
+
+        SetActiveWindow(hwnd_);
     }
     else
     {
@@ -292,7 +316,12 @@ void Overlay::QueryTarget(RECT& out, bool& visible)
     if (!target_ || !IsWindow(target_))
     {
         target_ = nullptr;
-        target_ = FindWindowW(nullptr, cfg_.targetTitle.c_str());
+        const ULONGLONG now = GetTickCount64();
+        if (now - lastFindTick_ > 250)
+        {
+            lastFindTick_ = now;
+            target_ = FindWindowW(nullptr, cfg_.targetTitle.c_str());
+        }
     }
 
     if (!target_)
@@ -334,7 +363,8 @@ void Overlay::ResizeSwapchain(UINT w, UINT h)
     ctx_->OMSetRenderTargets(0, nullptr, nullptr);
     rtv_.Reset();
 
-    HRESULT hr = swapchain_->ResizeBuffers(0, w, h, DXGI_FORMAT_UNKNOWN, 0);
+    HRESULT hr = swapchain_->ResizeBuffers(0, w, h, DXGI_FORMAT_UNKNOWN,
+        DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT);
     if (FAILED(hr)) { Fail("ResizeBuffers failed", hr); running_ = false; return; }
 
     width_ = w;
@@ -360,37 +390,35 @@ void Overlay::ApplyGeometry(const RECT& rcIn, bool visible)
     const bool moved = rc.left != curRect_.left || rc.top != curRect_.top;
     const bool sized = w != width_ || h != height_;
 
-    if (moved)
+    if (moved || sized)
     {
-        SetWindowPos(hwnd_, HWND_TOPMOST, rc.left, rc.top, 0, 0,
-            SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
-        curRect_.left = rc.left;
-        curRect_.top = rc.top;
+        SetWindowPos(hwnd_, HWND_TOPMOST, rc.left, rc.top, static_cast<int>(w), static_cast<int>(h),
+            SWP_NOACTIVATE);
+        if (sized) ResizeSwapchain(w, h);
+        curRect_ = rc;
     }
 
-    if (sized)
+    if (visible_)
     {
-        SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, static_cast<int>(w), static_cast<int>(h),
-            SWP_NOMOVE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
-        ResizeSwapchain(w, h);
-        curRect_.right = rc.right;
-        curRect_.bottom = rc.bottom;
+        const ULONGLONG now = GetTickCount64();
+        if (now - lastTopTick_ > 1000)
+        {
+            lastTopTick_ = now;
+            SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
     }
 }
 
 void Overlay::PollHotkeys()
 {
     const bool interact = (GetAsyncKeyState(cfg_.interactKey) & 0x8000) != 0;
+    const bool quit = (GetAsyncKeyState(cfg_.exitKey) & 0x8000) != 0;
 
     if (interact && !prevInteractKey_) SetInteractive(!interactive_);
-
-    if (cfg_.exitKey != 0) {
-        const bool quit = (GetAsyncKeyState(cfg_.exitKey) & 0x8000) != 0;
-        if (quit && !prevExitKey_) running_ = false;
-        prevExitKey_ = quit;
-    }
+    if (quit && !prevExitKey_)         running_ = false;
 
     prevInteractKey_ = interact;
+    prevExitKey_ = quit;
 }
 
 void Overlay::Run(const RenderFn& render)
@@ -399,12 +427,28 @@ void Overlay::Run(const RenderFn& render)
 
     DWORD mmcssTask = 0;
     HANDLE mmcss = AvSetMmThreadCharacteristicsW(L"Games", &mmcssTask);
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
     static const float kClear[4] = { 0.f, 0.f, 0.f, 0.f };
+    const bool hasWaitable = (waitable_ != nullptr);
+
+    LARGE_INTEGER perfFreq;
+    QueryPerformanceFrequency(&perfFreq);
 
     while (running_)
     {
+        LARGE_INTEGER frameStart;
+        QueryPerformanceCounter(&frameStart);
+
+        if (hasWaitable)
+        {
+            WaitForSingleObject(waitable_, 100);
+        }
+        else if (!visible_)
+        {
+            Sleep(8);
+        }
+
         MSG msg;
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
         {
@@ -416,18 +460,12 @@ void Overlay::Run(const RenderFn& render)
 
         PollHotkeys();
 
-        if ((s_geometryTick++ & 7) == 0) {
-            RECT rc{};
-            bool vis = true;
-            QueryTarget(rc, vis);
-            ApplyGeometry(rc, vis);
-            if (!running_) break;
-        }
-
-        if (!visible_) {
-            Sleep(10);
-            continue;
-        }
+        RECT rc{};
+        bool vis = true;
+        QueryTarget(rc, vis);
+        ApplyGeometry(rc, vis);
+        if (!running_) break;
+        if (!visible_) continue;
 
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
@@ -442,12 +480,37 @@ void Overlay::Run(const RenderFn& render)
         ctx_->ClearRenderTargetView(rtv, kClear);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-        const HRESULT hr = swapchain_->Present(0, DXGI_PRESENT_DO_NOT_WAIT);
+        const HRESULT hr = swapchain_->Present(cfg_.vsync ? 1 : 0, 0);
         if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
         {
             Fail("GPU device lost", hr);
             running_ = false;
             break;
+        }
+
+        {
+            LARGE_INTEGER presentEnd;
+            QueryPerformanceCounter(&presentEnd);
+
+            const double presentEndSec =
+                static_cast<double>(presentEnd.QuadPart) /
+                static_cast<double>(perfFreq.QuadPart);
+
+            const double frameStartSec =
+                static_cast<double>(frameStart.QuadPart) /
+                static_cast<double>(perfFreq.QuadPart);
+
+            g_overlayFrameTimeMs.store(
+                (presentEndSec - frameStartSec) * 1000.0,
+                std::memory_order_relaxed);
+
+            const double pub = GetLastSnapshotPublishTime();
+            if (pub > 0.0)
+            {
+                g_overlayPresentLatencyMs.store(
+                    (presentEndSec - pub) * 1000.0,
+                    std::memory_order_relaxed);
+            }
         }
     }
 

@@ -12,9 +12,9 @@ namespace UI {
         extern float g_subHover[4];
         extern float g_subSel[4];
 
-        extern float g_espHover[2][24];
-        extern float g_espSel[2][24];
-        extern float g_espColorHover[2][24];
+        extern float g_espHover[2][27];
+        extern float g_espSel[2][27];
+        extern float g_espColorHover[2][27];
 
         extern bool  g_espExpanded[2];
         extern float g_espExpandT[2];
@@ -23,6 +23,10 @@ namespace UI {
         extern bool  g_flagsExpanded[2];
         extern float g_flagsExpandT[2];
         extern float g_flagsExpanderHover[2];
+
+        extern bool  g_offscreenExpanded[2];
+        extern float g_offscreenExpandT[2];
+        extern float g_offscreenExpanderHover[2];
 
         ImU32 ScaleAlpha(ImU32 col, float mul);
         float Hash01(unsigned int x);
