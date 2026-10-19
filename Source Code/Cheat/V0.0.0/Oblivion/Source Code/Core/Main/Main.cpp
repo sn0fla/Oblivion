@@ -7,8 +7,9 @@
 #include "../Memory/Memory.hpp"
 #include "../UI/UI.hpp"
 #include "../../SDK/Entities/Entities.hpp"
-#include "../../SDK/Schemas/offsets.hpp"
-#include "../../SDK/Schemas/client_dll.hpp"
+#include "../../Utilities/Config/Config.hpp"
+#include "../../Utilities/Logging/Logging.hpp"
+#include "../../External/Xorstr/xorstr.hpp"
 #include "../Features/Visuals/Player/ESP/Box/Box.hpp"
 #include "../Features/Visuals/Player/ESP/Skeleton/Skeleton.hpp"
 #include "../Features/Visuals/Player/ESP/Healthbar/Healthbar.hpp"
@@ -20,8 +21,6 @@
 #include "../Features/Visuals/Player/ESP/Weapon/Weapon.hpp"
 #include "../Features/Visuals/Player/ESP/Flags/Flags.hpp"
 #include "../Features/Visuals/Player/ESP/Offscreen/Offscreen.hpp"
-#include "../../Utilities/Config/Config.hpp"
-#include "../../External/Xorstr/xorstr.hpp"
 
 #pragma comment(lib, "winmm.lib")
 
@@ -35,21 +34,32 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     timeBeginPeriod(1);
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
 
+    Logging::Init();
+
     config.Load(xorstr_("config.ini"));
+    Logging::Info("Config loaded (safe_mode=%d, esp_enemy=%d, esp_team=%d)",
+        config.safe_mode ? 1 : 0,
+        config.esp_enemy_enable ? 1 : 0,
+        config.esp_team_enable ? 1 : 0);
 
     g_AllowMemoryWrite.store(!config.safe_mode, std::memory_order_relaxed);
 
     if (!mem.Init(xorstr_(L"cs2.exe"))) {
+        Logging::Error("mem.Init failed (pid=%u)", mem.pid);
         timeEndPeriod(1);
         return 1;
     }
+    Logging::Info("mem.Init OK (pid=%u, client=0x%llX, engine=0x%llX)",
+        mem.pid,
+        static_cast<unsigned long long>(mem.client),
+        static_cast<unsigned long long>(mem.engine));
 
     Overlay::Config ocfg;
     ocfg.windowTitle = L"Overlay";
     ocfg.targetTitle = L"Counter-Strike 2";
     ocfg.hideWhenTargetInactive = false;
-    ocfg.vsync = false;
-    ocfg.targetFps = 144.0f;
+    ocfg.vsync = true;
+    ocfg.targetFps = 0.0f;
     ocfg.interactKey = VK_INSERT;
     ocfg.exitKey = 0;
     ocfg.fontPath = "C:\\Windows\\Fonts\\arialbd.ttf";
@@ -57,12 +67,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
     Overlay overlay;
     if (!overlay.Create(ocfg)) {
+        Logging::Error("overlay.Create failed: %s", overlay.LastError().c_str());
         MessageBoxA(nullptr, overlay.LastError().c_str(), "Overlay Error", MB_OK | MB_ICONERROR);
         mem.Cleanup(); timeEndPeriod(1);
         return 1;
     }
 
     overlay.SetInteractive(true);
+    Logging::Info("Overlay created");
 
     StartEntityThread();
 
@@ -77,7 +89,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
         const double uiStart = FrameTime();
         UI::Render(ov.Device(), ov.Context(), w, h);
-        g_uiRenderMs.store((FrameTime() - uiStart) * 1000.0, std::memory_order_relaxed);
+        Logging::Sample("ui_render_ms", (FrameTime() - uiStart) * 1000.0);
 
         static FrameSnapshot frame;
         if (frame.entities.capacity() < 64) {
@@ -86,46 +98,44 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
         const double snapStart = FrameTime();
         AcquireFrameSnapshot(frame);
-        g_snapshotWaitMs.store((FrameTime() - snapStart) * 1000.0, std::memory_order_relaxed);
-
-        ViewMatrix vm{};
-        if (mem.client) {
-            mem.ReadRaw(mem.client + cs2_dumper::offsets::client_dll::dwViewMatrix,
-                &vm, sizeof(ViewMatrix));
-        }
+        Logging::Sample("snapshot_wait_ms", (FrameTime() - snapStart) * 1000.0);
 
         if (frame.publishTime > 0.0 && mem.client) {
-            g_renderEntityCount.store(static_cast<int>(frame.entities.size()),
-                std::memory_order_relaxed);
-            g_snapshotAgeAtRenderMs.store(
-                (FrameTime() - frame.publishTime) * 1000.0,
-                std::memory_order_relaxed);
+            Logging::Sample("snapshot_age_at_render_ms",
+                (FrameTime() - frame.publishTime) * 1000.0);
+            Logging::Sample("render_entity_count",
+                static_cast<double>(frame.entities.size()));
+
+            ov.SetLastPublishSec(frame.publishTime);
 
             const double espStart = FrameTime();
-            Features::ESP::RenderSnaplineESP(frame, vm, ov.Device(), ov.Context(), w, h);
-            Features::ESP::RenderBoxESP(frame, vm, ov.Device(), ov.Context(), w, h);
-            Features::ESP::RenderSkeletonESP(frame, vm, ov.Device(), ov.Context(), w, h);
-            Features::ESP::RenderViewDirectionESP(frame, vm, ov.Device(), ov.Context(), w, h);
-            Features::ESP::RenderHeadCircleESP(frame, vm, ov.Device(), ov.Context(), w, h);
-            Features::ESP::RenderHealthbarESP(frame, vm, ov.Device(), ov.Context(), w, h);
-            Features::ESP::RenderNametagESP(frame, vm, ov.Device(), ov.Context(), w, h);
-            Features::ESP::RenderDistanceESP(frame, vm, ov.Device(), ov.Context(), w, h);
-            Features::ESP::RenderWeaponESP(frame, vm, ov.Device(), ov.Context(), w, h);
-            Features::ESP::RenderFlagsESP(frame, vm, ov.Device(), ov.Context(), w, h);
-            Features::ESP::RenderOffscreenESP(frame, vm, ov.Device(), ov.Context(), w, h);
-            g_espRenderMs.store((FrameTime() - espStart) * 1000.0, std::memory_order_relaxed);
+            Features::ESP::RenderSnaplineESP(frame, frame.viewMatrix, ov.Device(), ov.Context(), w, h);
+            Features::ESP::RenderBoxESP(frame, frame.viewMatrix, ov.Device(), ov.Context(), w, h);
+            Features::ESP::RenderSkeletonESP(frame, frame.viewMatrix, ov.Device(), ov.Context(), w, h);
+            Features::ESP::RenderViewDirectionESP(frame, frame.viewMatrix, ov.Device(), ov.Context(), w, h);
+            Features::ESP::RenderHeadCircleESP(frame, frame.viewMatrix, ov.Device(), ov.Context(), w, h);
+            Features::ESP::RenderHealthbarESP(frame, frame.viewMatrix, ov.Device(), ov.Context(), w, h);
+            Features::ESP::RenderNametagESP(frame, frame.viewMatrix, ov.Device(), ov.Context(), w, h);
+            Features::ESP::RenderDistanceESP(frame, frame.viewMatrix, ov.Device(), ov.Context(), w, h);
+            Features::ESP::RenderWeaponESP(frame, frame.viewMatrix, ov.Device(), ov.Context(), w, h);
+            Features::ESP::RenderFlagsESP(frame, frame.viewMatrix, ov.Device(), ov.Context(), w, h);
+            Features::ESP::RenderOffscreenESP(frame, frame.viewMatrix, ov.Device(), ov.Context(), w, h);
+            Logging::Sample("esp_render_ms", (FrameTime() - espStart) * 1000.0);
         }
 
-        g_renderCallbackMs.store((FrameTime() - cbStart) * 1000.0, std::memory_order_relaxed);
+        Logging::Sample("render_callback_ms", (FrameTime() - cbStart) * 1000.0);
+        Logging::Tick();
 
         if (g_unload_requested) ov.RequestExit();
         });
 
     StopEntityThread();
     overlay.Shutdown();
+    Logging::Info("Shutdown complete");
 
     mem.Cleanup();
     timeEndPeriod(1);
+    Logging::Shutdown();
     return 0;
 }
 

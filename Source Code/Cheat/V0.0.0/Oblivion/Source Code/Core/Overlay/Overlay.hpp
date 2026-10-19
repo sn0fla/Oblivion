@@ -9,12 +9,13 @@
 
 #include <Windows.h>
 #include <d3d11.h>
-#include <dxgi1_3.h>
+#include <dxgi1_5.h>
 #include <dcomp.h>
 #include <wrl/client.h>
 
 #include <functional>
 #include <string>
+#include <cstdint>
 
 #include "imgui.h"
 
@@ -31,7 +32,7 @@ public:
         int interactKey = VK_INSERT;
         int exitKey = VK_END;
         std::string fontPath;
-        float       fontSize = 16.0f;
+        float fontSize = 16.0f;
     };
 
     using RenderFn = std::function<void(Overlay&)>;
@@ -47,11 +48,13 @@ public:
 
     void RequestExit() { running_ = false; }
     void SetInteractive(bool on);
+    void SetLastPublishSec(double s) { lastPublishSec_ = s; }
 
     bool               IsInteractive() const { return interactive_; }
     HWND               Hwnd()          const { return hwnd_; }
     ImVec2             Size()          const { return ImVec2(static_cast<float>(width_), static_cast<float>(height_)); }
     const std::string& LastError()     const { return lastError_; }
+    UINT               MonitorHz()     const { return monitorHz_; }
 
     ID3D11Device* Device()  const { return device_.Get(); }
     ID3D11DeviceContext* Context() const { return ctx_.Get(); }
@@ -60,11 +63,24 @@ private:
     template <class T> using ComPtr = Microsoft::WRL::ComPtr<T>;
 
     bool CreateOverlayWindow();
-    bool CreateDevice();
-    bool CreateSwapchainAndComposition();
-    bool CreateRenderTarget();
+    bool CreateDevice(LUID* preferLuid = nullptr);
+    bool TryInitDwm();
+    bool InitSwapChainPath();
+    bool CreateSwapChain();
+    bool CreateComposition();
+    bool CreateDwmTarget();
+    bool CreateSwapChainTarget();
+    bool ReacquireDwm();
     bool InitImGui();
+    void Warmup();
     bool Fail(const char* what, HRESULT hr = S_OK);
+
+    void ReleaseTargets();
+    void ResetDevice();
+
+    UINT GetMonitorRefreshRate() const;
+    DWORD GetSwapchainWaitMs() const;
+    void RefreshMonitorHz();
 
     void QueryTarget(RECT& outRect, bool& outVisible);
     void ApplyGeometry(const RECT& rc, bool visible);
@@ -83,12 +99,20 @@ private:
 
     ComPtr<ID3D11Device>           device_;
     ComPtr<ID3D11DeviceContext>    ctx_;
-    ComPtr<IDXGISwapChain2>        swapchain_;
-    ComPtr<ID3D11RenderTargetView> rtv_;
+
+    ComPtr<IDXGISwapChain1>        swapChain_;
+    ComPtr<IDXGISwapChain2>        swapChain2_;
     ComPtr<IDCompositionDevice>    dcompDevice_;
     ComPtr<IDCompositionTarget>    dcompTarget_;
     ComPtr<IDCompositionVisual>    dcompVisual_;
-    HANDLE                         waitable_ = nullptr;
+
+    ComPtr<ID3D11Texture2D>        targetTex_;
+    ComPtr<IDXGISurface>           targetSurface_;
+    ComPtr<ID3D11RenderTargetView> rtv_;
+
+    bool   useDwm_ = false;
+    bool   allowTearing_ = false;
+    HANDLE waitable_ = nullptr;
 
     UINT width_ = 1;
     UINT height_ = 1;
@@ -103,6 +127,11 @@ private:
     ULONGLONG lastTopTick_ = 0;
     bool      prevInteractKey_ = false;
     bool      prevExitKey_ = false;
+
+    UINT      monitorHz_ = 60;
+    ULONGLONG lastHzPollTick_ = 0;
+
+    double lastPublishSec_ = 0.0;
 
     std::string lastError_;
 };

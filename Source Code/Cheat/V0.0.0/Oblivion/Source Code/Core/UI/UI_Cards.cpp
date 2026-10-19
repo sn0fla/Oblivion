@@ -16,7 +16,7 @@ namespace UI {
             "Name",
             "Healthbar",
             "Distance",
-            "Head Circle",
+            "Headcircle",
             "Snapline",
             "Viewdirection",
             "Weapon",
