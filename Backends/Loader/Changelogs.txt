@@ -1,5 +1,2 @@
-BETA Version 0.3.3
-
 - Reduced ESP desynchronization
-
 - Reworked ESP positioning
