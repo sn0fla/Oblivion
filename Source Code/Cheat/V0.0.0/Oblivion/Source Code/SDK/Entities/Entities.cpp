@@ -7,9 +7,8 @@
 #include <algorithm>
 #include <cstring>
 #include <cstdio>
-#include <thread>
-#include <atomic>
 #include <cmath>
+#include <intrin.h>
 
 double FrameTime() {
     static const LARGE_INTEGER freq = [] {
@@ -298,9 +297,6 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
     const uintptr_t localPawn = mem.Read<uintptr_t>(
         mem.client + cs2_dumper::offsets::client_dll::dwLocalPlayerPawn);
 
-    mem.ReadRaw(mem.client + cs2_dumper::offsets::client_dll::dwViewMatrix,
-        &frame.viewMatrix, sizeof(ViewMatrix));
-
     if (!localPawn || localPawn < 0x10000) return;
 
     frame.localTeam = mem.Read<uint8_t>(localPawn + C_BaseEntity::m_iTeamNum);
@@ -407,7 +403,10 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
             entity.health = (hp > 0 && hp <= 100) ? static_cast<uint8_t>(hp) : 0;
             std::memcpy(&sceneNode, pawnBuf + (kSceneOff - kMinPawnOff), sizeof(uintptr_t));
             std::memcpy(&bodyComp, pawnBuf + (kBodyCompOff - kMinPawnOff), sizeof(uintptr_t));
-            std::memcpy(&entity.velocity, pawnBuf + (kVelocityOff - kMinPawnOff), sizeof(Vector3));
+
+            Vector3 rawVel{};
+            std::memcpy(&rawVel, pawnBuf + (kVelocityOff - kMinPawnOff), sizeof(Vector3));
+            entity.velocity = rawVel;
             entity.sceneNode = sceneNode;
         }
         else continue;
@@ -528,7 +527,6 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
         else continue;
 
         entity.headPos = entity.origin;
-        entity.headPos.z += 72.0f;
         entity.feetPos = entity.origin;
 
         if (espEnabled) {
@@ -570,78 +568,16 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
 
         frame.entities.push_back(entity);
     }
+
+    mem.ReadRaw(mem.client + cs2_dumper::offsets::client_dll::dwViewMatrix,
+        &frame.viewMatrix, sizeof(ViewMatrix));
 }
 
-static FrameSnapshot    g_snapshots[2];
-static std::atomic<int> g_readIdx{ 0 };
-static int              g_writeIdx = 1;
-
-static std::thread      g_entityThread;
-static std::atomic<bool> g_entityThreadRunning{ false };
-
-static void EntityThreadFunc() {
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
-    unsigned cores = std::thread::hardware_concurrency();
-    if (cores > 1) {
-        DWORD_PTR mask = (DWORD_PTR)1 << ((cores > 2) ? (cores - 2) : 0);
-        SetThreadAffinityMask(GetCurrentThread(), mask);
-    }
-
-    Logging::Info("EntityThread started (cores=%u)", cores);
-
-    uint64_t localIters = 0;
-    double hzWindowStart = FrameTime();
-
-    while (g_entityThreadRunning.load(std::memory_order_relaxed)) {
-        if (!mem.client || !mem.pid || !mem.handle) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            continue;
-        }
-
-        const double t0 = FrameTime();
-
-        FrameSnapshot& dst = g_snapshots[g_writeIdx];
-
-        BuildFrameSnapshot(dst);
-
-        const double t1 = FrameTime();
-        dst.publishTime = t1;
-        dst.buildDuration = (t1 - t0) * 1000.0;
-
-        Logging::Sample("entity_build_ms", dst.buildDuration);
-
-        int prev = g_readIdx.exchange(g_writeIdx, std::memory_order_acq_rel);
-        g_writeIdx = prev;
-
-        localIters++;
-        const double span = t1 - hzWindowStart;
-        if (span >= 0.5) {
-            Logging::Sample("entity_hz", static_cast<double>(localIters) / span);
-            localIters = 0;
-            hzWindowStart = t1;
-        }
-
-        std::this_thread::yield();
-    }
-
-    Logging::Info("EntityThread exit");
-}
-
-void StartEntityThread() {
-    if (g_entityThreadRunning.load(std::memory_order_relaxed)) return;
-    g_entityThreadRunning.store(true, std::memory_order_relaxed);
-    g_entityThread = std::thread(EntityThreadFunc);
-}
-
-void StopEntityThread() {
-    if (!g_entityThreadRunning.load(std::memory_order_relaxed)) return;
-    g_entityThreadRunning.store(false, std::memory_order_relaxed);
-    if (g_entityThread.joinable()) g_entityThread.join();
-}
-
-void SignalEntityUpdate() {}
-
-void AcquireFrameSnapshot(FrameSnapshot& out) {
-    const int idx = g_readIdx.load(std::memory_order_acquire);
-    out = g_snapshots[idx];
+void AcquireRefreshedFrameSnapshot(FrameSnapshot& out) {
+    const double t0 = FrameTime();
+    BuildFrameSnapshot(out);
+    const double t1 = FrameTime();
+    out.publishTime = t1;
+    out.buildDuration = (t1 - t0) * 1000.0;
+    Logging::Sample("entity_build_ms", out.buildDuration);
 }

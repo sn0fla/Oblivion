@@ -260,7 +260,6 @@ bool Overlay::CreateDevice(LUID* preferLuid)
     if (SUCCEEDED(device_.As(&dxgiDev)))
     {
         dxgiDev->SetMaximumFrameLatency(1);
-        dxgiDev->SetGPUThreadPriority(7);
     }
     return true;
 }
@@ -834,10 +833,9 @@ void Overlay::Run(const RenderFn& render)
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
     const unsigned cores = std::thread::hardware_concurrency();
-    if (cores > 1)
+    if (cores >= 4)
     {
-        DWORD_PTR mask = (DWORD_PTR)1 << ((cores > 2) ? (cores - 1) : 0);
-        SetThreadAffinityMask(GetCurrentThread(), mask);
+        SetThreadAffinityMask(GetCurrentThread(), static_cast<DWORD_PTR>(0x3));
     }
 
     static const float kClear[4] = { 0.f, 0.f, 0.f, 0.f };

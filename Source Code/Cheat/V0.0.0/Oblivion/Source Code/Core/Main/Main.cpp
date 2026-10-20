@@ -1,7 +1,6 @@
 #include <Windows.h>
 #include <mmsystem.h>
 #include <imgui.h>
-#include <algorithm>
 
 #include "../Overlay/Overlay.hpp"
 #include "../Memory/Memory.hpp"
@@ -76,8 +75,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     overlay.SetInteractive(true);
     Logging::Info("Overlay created");
 
-    StartEntityThread();
-
     overlay.Run([&](Overlay& ov) {
         const double cbStart = FrameTime();
 
@@ -92,19 +89,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         Logging::Sample("ui_render_ms", (FrameTime() - uiStart) * 1000.0);
 
         static FrameSnapshot frame;
-        if (frame.entities.capacity() < 64) {
+        if (frame.entities.capacity() < 64)
             frame.entities.reserve(64);
-        }
 
         const double snapStart = FrameTime();
-        AcquireFrameSnapshot(frame);
+        AcquireRefreshedFrameSnapshot(frame);
         Logging::Sample("snapshot_wait_ms", (FrameTime() - snapStart) * 1000.0);
 
         if (frame.publishTime > 0.0 && mem.client) {
-            Logging::Sample("snapshot_age_at_render_ms",
-                (FrameTime() - frame.publishTime) * 1000.0);
-            Logging::Sample("render_entity_count",
-                static_cast<double>(frame.entities.size()));
+            const double age = FrameTime() - frame.publishTime;
+            Logging::Sample("snapshot_age_at_render_ms", age * 1000.0);
+            Logging::Sample("render_entity_count", static_cast<double>(frame.entities.size()));
 
             ov.SetLastPublishSec(frame.publishTime);
 
@@ -129,7 +124,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         if (g_unload_requested) ov.RequestExit();
         });
 
-    StopEntityThread();
     overlay.Shutdown();
     Logging::Info("Shutdown complete");
 

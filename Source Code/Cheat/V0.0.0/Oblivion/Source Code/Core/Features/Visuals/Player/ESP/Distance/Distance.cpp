@@ -1,4 +1,5 @@
 #include "Distance.hpp"
+#include "../Box/Box.hpp"
 #include "../../../../../../Utilities/Maths/Maths.hpp"
 #include "../../../../../../Utilities/Config/Config.hpp"
 #include "../../../../../../External/ImGUI/imgui.h"
@@ -34,34 +35,21 @@ namespace Features::ESP {
             if (enemy != isEnemy) continue;
             if (!ent.isAlive || ent.isDormant) continue;
 
-            Vector2 feetScreen, topScreen;
-            if (!Math::WorldToScreen(ent.feetPos, feetScreen, viewMatrix, width, height))
-                continue;
-            if (!Math::WorldToScreen(ent.headPos, topScreen, viewMatrix, width, height))
-                continue;
+            BoxRect box = ComputeBox(ent, viewMatrix, width, height);
+            if (!box.valid) continue;
 
-            if (!std::isfinite(feetScreen.x) || !std::isfinite(feetScreen.y) ||
-                !std::isfinite(topScreen.x) || !std::isfinite(topScreen.y))
-                continue;
-
-            const float screenH = feetScreen.y - topScreen.y;
-            if (screenH < 1.0f) continue;
-
-            const float fontSize = (std::clamp)(screenH * 0.11f, 10.0f, 18.0f);
-
+            const float fontSize = (std::clamp)(box.height() * 0.11f, 10.0f, 18.0f);
             const float dist = ent.origin.DistTo(frame.localOrigin);
 
             char buf[32];
             snprintf(buf, sizeof(buf), "%.0fm", dist / 100.0f);
 
             const ImVec2 sz = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, buf);
-            const float x = feetScreen.x - sz.x * 0.5f;
-            const float y = feetScreen.y + kBottomOff;
+            const float x = box.centerX - sz.x * 0.5f;
+            const float y = box.bottom + kBottomOff;
 
-            dl->AddText(font, fontSize,
-                ImVec2(x + 1.0f, y + 1.0f), shadowCol, buf);
-            dl->AddText(font, fontSize,
-                ImVec2(x, y), textCol, buf);
+            dl->AddText(font, fontSize, ImVec2(x + 1.0f, y + 1.0f), shadowCol, buf);
+            dl->AddText(font, fontSize, ImVec2(x, y), textCol, buf);
         }
     }
 

@@ -69,7 +69,6 @@ namespace Features::ESP {
         ID3D11Device*, ID3D11DeviceContext*, int width, int height)
     {
         ImDrawList* dl = ImGui::GetBackgroundDrawList();
-        const float fw = static_cast<float>(width);
         const float fh = static_cast<float>(height);
 
         const float scale = fh / 1080.0f;
@@ -89,72 +88,30 @@ namespace Features::ESP {
             config.esp_enemy_box_style_fill, config.esp_enemy_box_outline,
             config.esp_enemy_box_color, config.esp_enemy_box_fill_color, config.esp_enemy_box_outline_color);
 
-        const ViewMatrix& vm = viewMatrix;
         const uint8_t localTeam = frame.localTeam;
-
-        const float marginX = fw * 0.5f;
-        const float marginY = fh * 0.5f;
-        const float maxRawH = fh * 1.5f;
 
         for (const auto& ent : frame.entities) {
             const SideCfg& cfg = sides[(ent.team != localTeam) ? 1 : 0];
             if (!cfg.enabled || !cfg.boxEnabled) continue;
             if (!ent.isAlive || ent.isDormant) continue;
 
-            Vector2 feetScreen, headScreen, centerScreen;
-            if (!Math::WorldToScreen(ent.feetPos, feetScreen, vm, width, height)) continue;
-            if (!Math::WorldToScreen(ent.headPos, headScreen, vm, width, height)) continue;
+            BoxRect box = ComputeBox(ent, viewMatrix, width, height);
+            if (!box.valid) continue;
 
-            const Vector3 centerWorld = ent.hasBones
-                ? ent.bones[static_cast<int>(BoneIndex::Spine_1)]
-                : ent.origin;
+            const ImVec2 tl(box.left, box.top);
+            const ImVec2 br(box.right, box.bottom);
 
-            const bool centerOk = Math::WorldToScreen(centerWorld, centerScreen, vm, width, height);
-
-            const float fys = feetScreen.y;
-            const float hys = headScreen.y;
-            const float centerX = centerOk ? centerScreen.x : feetScreen.x;
-
-            if (!std::isfinite(centerX) || !std::isfinite(fys) || !std::isfinite(hys)) continue;
-
-            const float rawH = fys - hys;
-            if (!(rawH >= 1.0f) || rawH > maxRawH) continue;
-
-            if (centerX < -marginX || centerX > fw + marginX) continue;
-            if (fys < -marginY || fys > fh + marginY) continue;
-
-            const float closeT = (std::clamp)(rawH / (fh * 0.75f), 0.0f, 1.0f);
-
-            const float kTopMul = 0.05f + closeT * 0.18f;
-            const float kBotMul = 0.05f + closeT * 0.06f;
-            const float kAspect = 0.45f + closeT * 0.30f;
-
-            const float boxH = rawH * (1.0f + kTopMul + kBotMul);
-            const float boxW = boxH * kAspect;
-
-            if (boxH > fh * 1.5f) continue;
-            if (boxW > fw * 1.5f) continue;
-
-            const float topY = hys - rawH * kTopMul;
-            const float botY = topY + boxH;
-
-            const float left = centerX - (boxW * 0.5f);
-            const float right = left + boxW;
-
-            const ImVec2 tl(left, topY);
-            const ImVec2 br(right, botY);
-
-            const float minDim = (std::min)(boxW, boxH);
-            const float cornerLen = (std::min)(minDim * 0.22f, boxW * 0.35f);
+            const float minDim = (std::min)(box.width(), box.height());
+            const float cornerLen = (std::min)(minDim * 0.22f, box.width() * 0.35f);
             const float rounding = cfg.rounded ? (cfg.cornerStyle ? (std::min)(cornerLen, 12.0f) : (std::min)(minDim * 0.12f, 6.0f)) : 0.0f;
 
             if (cfg.fillStyle)
                 dl->AddRectFilled(tl, br, cfg.fillCol, rounding, cfg.rounded ? ImDrawFlags_RoundCornersAll : 0);
 
             if (cfg.outlineStyle)
-                DrawOutlinePass(dl, left, topY, right, botY, cornerLen, rounding, cfg.cornerStyle, cfg.rounded, outlineThickness, cfg.outlineCol);
+                DrawOutlinePass(dl, box.left, box.top, box.right, box.bottom, cornerLen, rounding, cfg.cornerStyle, cfg.rounded, outlineThickness, cfg.outlineCol);
 
-            DrawOutlinePass(dl, left, topY, right, botY, cornerLen, rounding, cfg.cornerStyle, cfg.rounded, boxThickness, cfg.boxCol);
+            DrawOutlinePass(dl, box.left, box.top, box.right, box.bottom, cornerLen, rounding, cfg.cornerStyle, cfg.rounded, boxThickness, cfg.boxCol);
         }
     }
 }

@@ -1,4 +1,5 @@
 #include "Snapline.hpp"
+#include "../Box/Box.hpp"
 #include "../../../../../../Utilities/Maths/Maths.hpp"
 #include "../../../../../../Utilities/Config/Config.hpp"
 #include "../../../../../../External/ImGUI/imgui.h"
@@ -30,14 +31,10 @@ namespace Features::ESP {
             if (enemy != isEnemy) continue;
             if (!ent.isAlive || ent.isDormant) continue;
 
-            Vector2 feetScreen;
-            if (!Math::WorldToScreen(ent.feetPos, feetScreen, viewMatrix, width, height))
-                continue;
+            BoxRect box = ComputeBox(ent, viewMatrix, width, height);
+            if (!box.valid) continue;
 
-            if (!std::isfinite(feetScreen.x) || !std::isfinite(feetScreen.y))
-                continue;
-
-            dl->AddLine(origin, ImVec2(feetScreen.x, feetScreen.y), col, 1.0f);
+            dl->AddLine(origin, ImVec2(box.centerX, box.bottom), col, 1.0f);
         }
     }
 

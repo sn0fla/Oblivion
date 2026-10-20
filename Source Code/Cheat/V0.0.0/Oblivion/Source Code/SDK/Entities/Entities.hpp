@@ -35,13 +35,13 @@ struct FrameEntity {
     char name[128] = {};
     char weaponName[32] = {};
 
-    bool  isFlashed = false;
-    bool  isScoped = false;
-    bool  isDefusing = false;
-    bool  isPlanting = false;
-    bool  hasBomb = false;
-    bool  hasHelmet = false;
-    bool  isReloading = false;
+    bool    isFlashed = false;
+    bool    isScoped = false;
+    bool    isDefusing = false;
+    bool    isPlanting = false;
+    bool    hasBomb = false;
+    bool    hasHelmet = false;
+    bool    isReloading = false;
     uint8_t armor = 0;
     int32_t money = 0;
     int32_t ping = 0;
@@ -60,13 +60,7 @@ struct FrameSnapshot {
 };
 
 void BuildFrameSnapshot(FrameSnapshot& frame);
-void StartEntityThread();
-void StopEntityThread();
-void SignalEntityUpdate();
-void AcquireFrameSnapshot(FrameSnapshot& out);
-
-void SetInterpTime(float t);
-float GetInterpTime();
+void AcquireRefreshedFrameSnapshot(FrameSnapshot& out);
 
 double FrameTime();
 
@@ -79,8 +73,3 @@ inline std::atomic<double> g_snapshotAgeAtRenderMs{ 0.0 };
 inline std::atomic<int>    g_renderEntityCount{ 0 };
 inline std::atomic<double> g_overlayPresentLatencyMs{ 0.0 };
 inline std::atomic<double> g_overlayFrameTimeMs{ 0.0 };
-
-inline double   GetLastSnapshotPublishTime() { return 0.0; }
-inline double   GetEntityThreadHz() { return 0.0; }
-inline double   GetEntityThreadLastBuildMs() { return 0.0; }
-inline uint64_t GetEntityThreadIterations() { return 0; }

@@ -1,4 +1,5 @@
 #include "Nametag.hpp"
+#include "../Box/Box.hpp"
 #include "../../../../../../Utilities/Maths/Maths.hpp"
 #include "../../../../../../Utilities/Config/Config.hpp"
 #include "../../../../../../External/ImGUI/imgui.h"
@@ -21,13 +22,9 @@ namespace Features::ESP {
         ImFont* font = ImGui::GetFont();
         if (!font) return;
 
-        const float fh = static_cast<float>(height);
-
         const float* colArr = isEnemy ? config.esp_enemy_name_color
             : config.esp_team_name_color;
         const ImU32 textCol = Col(colArr);
-
-        constexpr float kGapRatio = 0.18f;
 
         for (const auto& ent : frame.entities) {
             const bool enemy = (ent.team != frame.localTeam);
@@ -35,36 +32,16 @@ namespace Features::ESP {
             if (!ent.isAlive || ent.isDormant) continue;
             if (ent.name[0] == '\0') continue;
 
-            Vector2 feetScreen, topScreen, centerScreen;
-            if (!Math::WorldToScreen(ent.feetPos, feetScreen, viewMatrix, width, height)) continue;
-            if (!Math::WorldToScreen(ent.headPos, topScreen, viewMatrix, width, height)) continue;
+            BoxRect box = ComputeBox(ent, viewMatrix, width, height);
+            if (!box.valid) continue;
 
-            const Vector3 centerWorld = ent.hasBones
-                ? ent.bones[static_cast<int>(BoneIndex::Spine_1)]
-                : ent.origin;
-
-            const bool centerOk = Math::WorldToScreen(centerWorld, centerScreen, viewMatrix, width, height);
-
-            if (!std::isfinite(feetScreen.y) || !std::isfinite(topScreen.y)) continue;
-
-            const float centerX = centerOk ? centerScreen.x : feetScreen.x;
-            if (!std::isfinite(centerX)) continue;
-
-            const float screenH = feetScreen.y - topScreen.y;
-            if (screenH < 1.0f) continue;
-
-            const float closeT = (std::clamp)(screenH / (fh * 0.75f), 0.0f, 1.0f);
-            const float kTopMul = 0.05f + closeT * 0.18f;
-
-            const float fontSize = (std::clamp)(screenH * 0.11f, 10.0f, 18.0f);
+            const float fontSize = (std::clamp)(box.height() * 0.11f, 10.0f, 18.0f);
             const ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, ent.name);
             if (textSize.x <= 0.0f) continue;
 
-            const float gap = fontSize * kGapRatio;
-            const float boxTopY = topScreen.y - screenH * kTopMul;
-
-            const float textX = centerX - textSize.x * 0.5f;
-            const float textY = boxTopY - gap - textSize.y;
+            const float gap = fontSize * 0.25f;
+            const float textX = box.centerX - textSize.x * 0.5f;
+            const float textY = box.top - gap - textSize.y;
 
             constexpr float kShadowOff = 1.0f;
             const ImU32 shadow = IM_COL32(0, 0, 0, 200);

@@ -1,4 +1,5 @@
 #include "Flags.hpp"
+#include "../Box/Box.hpp"
 #include "../../../../../../Utilities/Maths/Maths.hpp"
 #include "../../../../../../Utilities/Config/Config.hpp"
 #include "../../../../../../External/ImGUI/imgui.h"
@@ -22,8 +23,6 @@ namespace Features::ESP {
         ImDrawList* dl = ImGui::GetBackgroundDrawList();
         ImFont* font = ImGui::GetFont();
         if (!font) return;
-
-        const float fh = static_cast<float>(height);
 
         const bool wantFlashed = isEnemy ? config.esp_enemy_flags_flashed : config.esp_team_flags_flashed;
         const bool wantScoped = isEnemy ? config.esp_enemy_flags_scoped : config.esp_team_flags_scoped;
@@ -54,34 +53,8 @@ namespace Features::ESP {
             if (enemy != isEnemy) continue;
             if (!ent.isAlive || ent.isDormant) continue;
 
-            Vector2 feetScreen, headScreen, centerScreen;
-            if (!Math::WorldToScreen(ent.feetPos, feetScreen, viewMatrix, width, height)) continue;
-            if (!Math::WorldToScreen(ent.headPos, headScreen, viewMatrix, width, height)) continue;
-
-            const Vector3 centerWorld = ent.hasBones
-                ? ent.bones[static_cast<int>(BoneIndex::Spine_1)]
-                : ent.origin;
-
-            const bool centerOk = Math::WorldToScreen(centerWorld, centerScreen, viewMatrix, width, height);
-
-            if (!std::isfinite(feetScreen.y) || !std::isfinite(headScreen.y)) continue;
-
-            const float centerX = centerOk ? centerScreen.x : feetScreen.x;
-            if (!std::isfinite(centerX)) continue;
-
-            const float rawH = feetScreen.y - headScreen.y;
-            if (rawH < 1.0f) continue;
-
-            const float closeT = (std::clamp)(rawH / (fh * 0.75f), 0.0f, 1.0f);
-
-            const float kTopMul = 0.05f + closeT * 0.18f;
-            const float kBotMul = 0.05f + closeT * 0.06f;
-            const float kAspect = 0.45f + closeT * 0.30f;
-
-            const float boxH = rawH * (1.0f + kTopMul + kBotMul);
-            const float boxW = boxH * kAspect;
-            const float topY = headScreen.y - rawH * kTopMul;
-            const float right = centerX + boxW * 0.5f;
+            BoxRect box = ComputeBox(ent, viewMatrix, width, height);
+            if (!box.valid) continue;
 
             struct Line { char text[48]; const float* col; };
             Line lines[12];
@@ -153,11 +126,11 @@ namespace Features::ESP {
 
             if (lineCount == 0) continue;
 
-            const float fontSize = (std::clamp)(rawH * 0.09f, 9.0f, 13.0f);
+            const float fontSize = (std::clamp)(box.height() * 0.09f, 9.0f, 13.0f);
             const float lineH = fontSize + 1.0f;
 
-            float x = right + 4.0f;
-            float y = topY;
+            float x = box.right + 6.0f;
+            float y = box.top;
 
             for (int i = 0; i < lineCount; ++i) {
                 const ImU32 textCol = Col(lines[i].col);
