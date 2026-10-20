@@ -1,8 +1,5 @@
-BETA Version 0.1.2
+BETA Version 0.3.3
 
-- Fixed for latest game patch
 - Reduced ESP desynchronization
-- Added Offscreen ESP
-- Added Flags ESP
-- Resolved a bug where menu wasn't interactive on load
-- Implemented indirect syscalls
+
+- Reworked ESP positioning
