@@ -591,10 +591,22 @@ bool Memory::Init(const wchar_t* processName) {
     engine = GetModuleBase(engineDll.c_str());
 
     if (!client || !engine) {
-        MessageBoxA(NULL, "Failed to get module bases (client.dll / engine2.dll).",
-            "Memory Init Error", MB_OK | MB_ICONERROR);
-        Cleanup();
-        return false;
+        const ULONGLONG timeoutMs = 5ull * 60ull * 1000ull;
+        const ULONGLONG startTick = GetTickCount64();
+
+        while ((GetTickCount64() - startTick) < timeoutMs) {
+            Sleep(1000);
+            client = GetModuleBase(clientDll.c_str());
+            engine = GetModuleBase(engineDll.c_str());
+            if (client && engine) break;
+        }
+
+        if (!client || !engine) {
+            MessageBoxA(NULL, "Timed out waiting for client.dll / engine2.dll to load (5 minutes).",
+                "Memory Init Error", MB_OK | MB_ICONERROR);
+            Cleanup();
+            return false;
+        }
     }
 
     return true;

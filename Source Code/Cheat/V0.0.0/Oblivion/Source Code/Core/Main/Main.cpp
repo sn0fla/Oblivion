@@ -1,14 +1,17 @@
 #include <Windows.h>
 #include <mmsystem.h>
+#include <shellapi.h>
 #include <imgui.h>
 
 #include "../Overlay/Overlay.hpp"
 #include "../Memory/Memory.hpp"
-#include "../UI/UI.hpp"
+#include "../GUI/GUI.hpp"
+#include "../GUI/Animations/Animations.hpp"
 #include "../../SDK/Entities/Entities.hpp"
 #include "../../Utilities/Config/Config.hpp"
 #include "../../Utilities/Logging/Logging.hpp"
 #include "../../External/Xorstr/xorstr.hpp"
+#include "../Features/Combat/Aimbot/Aimbot.hpp"
 #include "../Features/Visuals/Player/ESP/Box/Box.hpp"
 #include "../Features/Visuals/Player/ESP/Skeleton/Skeleton.hpp"
 #include "../Features/Visuals/Player/ESP/Healthbar/Healthbar.hpp"
@@ -28,18 +31,47 @@
 
 bool g_unload_requested = false;
 
+static bool HasUiActiveFlag()
+{
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) return false;
+
+    bool found = false;
+    for (int i = 1; i < argc; ++i)
+    {
+        if (wcscmp(argv[i], L"--ui-active") == 0)
+        {
+            found = true;
+            break;
+        }
+    }
+    LocalFree(argv);
+    return found;
+}
+
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    timeBeginPeriod(1);
-    SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
 
     Logging::Init();
 
     config.Load(xorstr_("config.ini"));
-    Logging::Info("Config loaded (safe_mode=%d, esp_enemy=%d, esp_team=%d)",
+
+    if (config.fullscreen_mode && !HasUiActiveFlag() && !Overlay::HasUIAccess()) {
+        if (Overlay::TryElevateToUIAccess()) {
+            Logging::Shutdown();
+            return 0;
+        }
+    }
+
+    timeBeginPeriod(1);
+    SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+
+    Logging::Info("Config loaded (safe_mode=%d, esp_enemy=%d, esp_team=%d, fullscreen_mode=%d)",
         config.safe_mode ? 1 : 0,
         config.esp_enemy_enable ? 1 : 0,
-        config.esp_team_enable ? 1 : 0);
+        config.esp_team_enable ? 1 : 0,
+        config.fullscreen_mode ? 1 : 0);
 
     g_AllowMemoryWrite.store(!config.safe_mode, std::memory_order_relaxed);
 
@@ -57,7 +89,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     ocfg.windowTitle = L"Overlay";
     ocfg.targetTitle = L"Counter-Strike 2";
     ocfg.hideWhenTargetInactive = false;
-    ocfg.vsync = true;
+    ocfg.vsync = config.vsync;
+    ocfg.allow_tearing = config.allow_tearing;
     ocfg.targetFps = 0.0f;
     ocfg.interactKey = VK_INSERT;
     ocfg.exitKey = 0;
@@ -73,19 +106,25 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     }
 
     overlay.SetInteractive(true);
+    Animations::BootStart();
     Logging::Info("Overlay created");
 
     overlay.Run([&](Overlay& ov) {
+        ov.SetVsync(config.vsync);
+        ov.SetAllowTearing(config.allow_tearing);
+
+        Animations::BootTick();
+
         const double cbStart = FrameTime();
 
         const bool menuOpen = ov.IsInteractive();
-        config.show_menu = menuOpen;
+        config.show_menu = menuOpen && !Animations::IsBooting();
 
         const int w = static_cast<int>(ov.Size().x);
         const int h = static_cast<int>(ov.Size().y);
 
         const double uiStart = FrameTime();
-        UI::Render(ov.Device(), ov.Context(), w, h);
+        GUI::Render(ov.Device(), ov.Context(), w, h);
         Logging::Sample("ui_render_ms", (FrameTime() - uiStart) * 1000.0);
 
         static FrameSnapshot frame;
@@ -103,6 +142,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
             ov.SetLastPublishSec(frame.publishTime);
 
+            const double aimStart = FrameTime();
+            Aimbot::Tick(frame);
+            Logging::Sample("aimbot_tick_ms", (FrameTime() - aimStart) * 1000.0);
+
             const double espStart = FrameTime();
             Features::ESP::RenderSnaplineESP(frame, frame.viewMatrix, ov.Device(), ov.Context(), w, h);
             Features::ESP::RenderBoxESP(frame, frame.viewMatrix, ov.Device(), ov.Context(), w, h);
@@ -117,6 +160,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             Features::ESP::RenderOffscreenESP(frame, frame.viewMatrix, ov.Device(), ov.Context(), w, h);
             Logging::Sample("esp_render_ms", (FrameTime() - espStart) * 1000.0);
         }
+
+        Animations::Render();
 
         Logging::Sample("render_callback_ms", (FrameTime() - cbStart) * 1000.0);
         Logging::Tick();

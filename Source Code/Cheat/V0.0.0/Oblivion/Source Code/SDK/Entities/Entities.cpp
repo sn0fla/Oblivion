@@ -25,7 +25,6 @@ namespace {
         uintptr_t controller = 0;
         uintptr_t pawn = 0;
         uint32_t  pawnHandle = 0;
-        uintptr_t boneArray = 0;
         uintptr_t bodyComp = 0;
         uintptr_t cachedC4 = 0;
         double    lastC4Check = 0.0;
@@ -258,7 +257,6 @@ namespace {
                 if (g_cache[j].controller == c) {
                     dst.pawn = g_cache[j].pawn;
                     dst.pawnHandle = g_cache[j].pawnHandle;
-                    dst.boneArray = g_cache[j].boneArray;
                     dst.bodyComp = g_cache[j].bodyComp;
                     dst.cachedC4 = g_cache[j].cachedC4;
                     dst.lastC4Check = g_cache[j].lastC4Check;
@@ -287,6 +285,7 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
     frame.entities.clear();
     frame.localTeam = 0;
     frame.localOrigin = Vector3{};
+    frame.localEyePos = Vector3{};
     frame.localVelocity = Vector3{};
     frame.viewMatrix = ViewMatrix{};
 
@@ -310,11 +309,26 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
         }
         mem.ReadRaw(localPawn + C_BaseEntity::m_vecAbsVelocity,
             &frame.localVelocity, sizeof(Vector3));
+
+        float duckAmount = 0.0f;
+        const uintptr_t moveSvc = mem.Read<uintptr_t>(
+            localPawn + C_BasePlayerPawn::m_pMovementServices);
+        if (moveSvc) {
+            duckAmount = mem.Read<float>(
+                moveSvc + CCSPlayer_MovementServices::m_flDuckAmount);
+            if (!std::isfinite(duckAmount)) duckAmount = 0.0f;
+            duckAmount = (std::clamp)(duckAmount, 0.0f, 1.0f);
+        }
+        const float eyeHeight = 64.0f - duckAmount * 10.0f;
+        frame.localEyePos = frame.localOrigin + Vector3(0.0f, 0.0f, eyeHeight);
     }
 
     const uintptr_t entityList = mem.Read<uintptr_t>(
         mem.client + cs2_dumper::offsets::client_dll::dwEntityList);
     if (!entityList) return;
+
+    mem.ReadRaw(mem.client + cs2_dumper::offsets::client_dll::dwViewMatrix,
+        &frame.viewMatrix, sizeof(ViewMatrix));
 
     const size_t kTeamOff = C_BaseEntity::m_iTeamNum;
     const size_t kLifeOff = C_BaseEntity::m_lifeState;
@@ -360,7 +374,6 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
         if (!pawnHandle) {
             slot.pawn = 0;
             slot.pawnHandle = 0;
-            slot.boneArray = 0;
             slot.bodyComp = 0;
             slot.cachedC4 = 0;
             slot.lastC4Check = 0.0;
@@ -373,7 +386,6 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
         if (slot.pawnHandle != pawnHandle) {
             slot.pawn = ResolvePawn(entityList, pawnHandle);
             slot.pawnHandle = pawnHandle;
-            slot.boneArray = 0;
             slot.bodyComp = 0;
             slot.cachedC4 = 0;
             slot.lastC4Check = 0.0;
@@ -416,7 +428,6 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
         const bool healthOk = (entity.health > 0 && entity.health <= 100);
         if (!lifeOk || !healthOk || !teamOk) {
             slot.pawn = 0;
-            slot.boneArray = 0;
             slot.bodyComp = 0;
             slot.cachedC4 = 0;
             slot.lastC4Check = 0.0;
@@ -425,6 +436,8 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
 
         const bool isEnemySide = (entity.team != frame.localTeam);
         const bool espEnabled = isEnemySide ? config.esp_enemy_enable : config.esp_team_enable;
+        const bool aimNeedsBones = config.aim_enable && isEnemySide;
+        const bool needBones = espEnabled || aimNeedsBones;
         const bool flagsEnabled = espEnabled && (isEnemySide ? config.esp_enemy_flags : config.esp_team_flags);
 
         const bool needWeapon = espEnabled && (isEnemySide ? config.esp_enemy_weapon : config.esp_team_weapon);
@@ -529,21 +542,16 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
         entity.headPos = entity.origin;
         entity.feetPos = entity.origin;
 
-        if (espEnabled) {
-            if (!slot.boneArray) {
-                if (!slot.bodyComp) slot.bodyComp = mem.Read<uintptr_t>(pawn + kBodyCompOff);
-                if (slot.bodyComp) {
-                    const uintptr_t skel = mem.Read<uintptr_t>(slot.bodyComp + kSceneNodeOff);
-                    if (skel) slot.boneArray = mem.Read<uintptr_t>(
-                        skel + kModelStateOff + kBoneArrayOff);
-                }
-            }
+        uintptr_t boneArray = 0;
+        if (needBones && bodyComp) {
+            const uintptr_t skel = mem.Read<uintptr_t>(bodyComp + kSceneNodeOff);
+            if (skel)
+                boneArray = mem.Read<uintptr_t>(skel + kModelStateOff + kBoneArrayOff);
         }
+        entity.boneArray = boneArray;
 
-        entity.boneArray = slot.boneArray;
-
-        if (espEnabled && entity.boneArray && !entity.isDormant) {
-            if (mem.ReadRaw(entity.boneArray, boneBuf, sizeof(boneBuf))) {
+        if (needBones && boneArray && !entity.isDormant) {
+            if (mem.ReadRaw(boneArray, boneBuf, sizeof(boneBuf))) {
                 for (int b = 0; b < kBoneCount; ++b)
                     std::memcpy(&entity.bones[b], boneBuf + b * kBoneStride, sizeof(Vector3));
                 entity.hasBones = true;
@@ -568,9 +576,6 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
 
         frame.entities.push_back(entity);
     }
-
-    mem.ReadRaw(mem.client + cs2_dumper::offsets::client_dll::dwViewMatrix,
-        &frame.viewMatrix, sizeof(ViewMatrix));
 }
 
 void AcquireRefreshedFrameSnapshot(FrameSnapshot& out) {

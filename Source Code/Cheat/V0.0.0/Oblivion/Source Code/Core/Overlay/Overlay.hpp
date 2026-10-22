@@ -28,6 +28,7 @@ public:
         std::wstring targetTitle;
         bool hideWhenTargetInactive = true;
         bool vsync = true;
+        bool allow_tearing = true;
         float targetFps = 360.0f;
         int interactKey = VK_INSERT;
         int exitKey = VK_END;
@@ -42,6 +43,9 @@ public:
     Overlay(const Overlay&) = delete;
     Overlay& operator=(const Overlay&) = delete;
 
+    static bool HasUIAccess();
+    static bool TryElevateToUIAccess();
+
     bool Create(const Config& cfg);
     void Run(const RenderFn& render);
     void Shutdown();
@@ -49,6 +53,8 @@ public:
     void RequestExit() { running_ = false; }
     void SetInteractive(bool on);
     void SetLastPublishSec(double s) { lastPublishSec_ = s; }
+    void SetVsync(bool on) { cfg_.vsync = on; }
+    void SetAllowTearing(bool on) { cfg_.allow_tearing = on; }
 
     bool               IsInteractive() const { return interactive_; }
     HWND               Hwnd()          const { return hwnd_; }
@@ -64,13 +70,10 @@ private:
 
     bool CreateOverlayWindow();
     bool CreateDevice(LUID* preferLuid = nullptr);
-    bool TryInitDwm();
     bool InitSwapChainPath();
     bool CreateSwapChain();
     bool CreateComposition();
-    bool CreateDwmTarget();
     bool CreateSwapChainTarget();
-    bool ReacquireDwm();
     bool InitImGui();
     void Warmup();
     bool Fail(const char* what, HRESULT hr = S_OK);
@@ -86,6 +89,7 @@ private:
     void ApplyGeometry(const RECT& rc, bool visible);
     void ResizeSwapchain(UINT w, UINT h);
     void PollHotkeys();
+    void PumpInput();
 
     static LRESULT CALLBACK WndProcStatic(HWND h, UINT m, WPARAM w, LPARAM l);
 
@@ -110,8 +114,7 @@ private:
     ComPtr<IDXGISurface>           targetSurface_;
     ComPtr<ID3D11RenderTargetView> rtv_;
 
-    bool   useDwm_ = false;
-    bool   allowTearing_ = false;
+    bool   hwTearingOk_ = false;
     HANDLE waitable_ = nullptr;
 
     UINT width_ = 1;
@@ -127,6 +130,9 @@ private:
     ULONGLONG lastTopTick_ = 0;
     bool      prevInteractKey_ = false;
     bool      prevExitKey_ = false;
+
+    bool prevKeys_[256] = {};
+    bool prevMouse_[5] = {};
 
     UINT      monitorHz_ = 60;
     ULONGLONG lastHzPollTick_ = 0;

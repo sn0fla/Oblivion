@@ -1,5 +1,5 @@
 #include "Render.hpp"
-#include "../UI/Framework/Framework.hpp"
+#include "../GUI/Framework/Framework.hpp"
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>

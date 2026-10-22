@@ -53,6 +53,7 @@ struct FrameSnapshot {
     std::vector<FrameEntity> entities;
     ViewMatrix viewMatrix{};
     Vector3 localOrigin{};
+    Vector3 localEyePos{};
     Vector3 localVelocity{};
     uint8_t localTeam = 0;
     double publishTime = 0.0;

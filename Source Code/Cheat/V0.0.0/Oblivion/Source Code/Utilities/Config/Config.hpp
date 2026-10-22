@@ -18,6 +18,13 @@ extern ConfigBrowser configBrowser;
 struct Config {
     bool show_menu = true;
 
+    bool  aim_enable = false;
+    int   aim_mode = 0;
+    int   aim_key = 0;
+    float aim_fov = 180.0f;
+    int   aim_hitbox = 1;
+    float aim_smooth = 50.0f;
+
     bool esp_enemy_enable = false;
     bool esp_enemy_box = false;
     float esp_enemy_box_color[4] = { 1.0f, 0.2f, 0.2f, 1.0f };
@@ -125,6 +132,10 @@ struct Config {
     float esp_team_offscreen_color[4] = { 0.3f, 1.0f, 0.3f, 1.0f };
     float esp_team_offscreen_distance = 0.35f;
     float esp_team_offscreen_size = 22.0f;
+
+    bool vsync = true;
+    bool allow_tearing = true;
+    bool fullscreen_mode = false;
 
     bool safe_mode = true;
     bool safe_mode_no_warn = false;

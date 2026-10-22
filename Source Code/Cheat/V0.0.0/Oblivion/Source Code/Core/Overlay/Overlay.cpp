@@ -6,88 +6,122 @@
 #include "../../Utilities/Logging/Logging.hpp"
 
 #include <avrt.h>
-#include <dwmapi.h>
 #include <cstdio>
 #include <cstdint>
 #include <atomic>
 #include <intrin.h>
 #include <thread>
+#include <tlhelp32.h>
+#include <shellapi.h>
+#include <securitybaseapi.h>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "dcomp.lib")
 #pragma comment(lib, "avrt.lib")
-#pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "winmm.lib")
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 static constexpr wchar_t kClassName[] = L"ExternalOverlayWnd";
 
-typedef HRESULT(WINAPI* DwmGetDxSharedSurfaceFn)(
-    HWND hWnd, HANDLE* phSurface, LUID* pAdapterLuid,
-    UINT* pFmtWindow, UINT* pPresentFlags, ULONGLONG* pWin32kUpdateId);
-
-typedef HRESULT(WINAPI* DCompositionWaitForCompositorClockFn)(
-    UINT count, const HANDLE* pHandles, DWORD dwTimeoutInMs);
-
-static int64_t Qpc()
+static DWORD FindProcessIdByName(const wchar_t* processName)
 {
-    LARGE_INTEGER v;
-    QueryPerformanceCounter(&v);
-    return v.QuadPart;
-}
-
-static DwmGetDxSharedSurfaceFn GetDwmGetDxSharedSurface()
-{
-    static DwmGetDxSharedSurfaceFn fn = nullptr;
-    static bool tried = false;
-    if (!tried)
+    DWORD pid = 0;
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot != INVALID_HANDLE_VALUE)
     {
-        tried = true;
-        HMODULE h = GetModuleHandleW(L"dwmapi.dll");
-        if (!h)
-            h = LoadLibraryW(L"dwmapi.dll");
-        if (h)
-            fn = reinterpret_cast<DwmGetDxSharedSurfaceFn>(
-                GetProcAddress(h, "DwmGetDxSharedSurface"));
+        PROCESSENTRY32W entry{ sizeof(entry) };
+        if (Process32FirstW(snapshot, &entry))
+        {
+            do
+            {
+                if (_wcsicmp(entry.szExeFile, processName) == 0)
+                {
+                    pid = entry.th32ProcessID;
+                    break;
+                }
+            } while (Process32NextW(snapshot, &entry));
+        }
+        CloseHandle(snapshot);
     }
-    return fn;
+    return pid;
 }
 
-static DCompositionWaitForCompositorClockFn GetWaitForCompositorClock()
+bool Overlay::HasUIAccess()
 {
-    static DCompositionWaitForCompositorClockFn fn = nullptr;
-    static bool tried = false;
-    if (!tried)
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
+        return false;
+
+    DWORD uiAccess = 0;
+    DWORD cbSize = sizeof(uiAccess);
+    const BOOL ok = GetTokenInformation(token, TokenUIAccess, &uiAccess, cbSize, &cbSize);
+    CloseHandle(token);
+
+    return ok && uiAccess != 0;
+}
+
+bool Overlay::TryElevateToUIAccess()
+{
+    DWORD targetPid = FindProcessIdByName(L"osk.exe");
+    if (targetPid == 0)
     {
-        tried = true;
-        HMODULE h = GetModuleHandleW(L"dcomp.dll");
-        if (!h)
-            h = LoadLibraryW(L"dcomp.dll");
-        if (h)
-            fn = reinterpret_cast<DCompositionWaitForCompositorClockFn>(
-                GetProcAddress(h, "DCompositionWaitForCompositorClock"));
+        HINSTANCE sh = ShellExecuteW(nullptr, L"open", L"osk.exe", nullptr, nullptr, SW_HIDE);
+        if (reinterpret_cast<INT_PTR>(sh) <= 32)
+            return false;
+        Sleep(600);
+        targetPid = FindProcessIdByName(L"osk.exe");
     }
-    return fn;
-}
-
-static bool GetAdapterLuid(ID3D11Device* dev, LUID& out)
-{
-    Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
-    if (FAILED(dev->QueryInterface(IID_PPV_ARGS(&dxgiDevice))))
+    if (targetPid == 0)
         return false;
 
-    Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
-    if (FAILED(dxgiDevice->GetAdapter(&adapter)))
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, targetPid);
+    if (!hProcess)
         return false;
 
-    DXGI_ADAPTER_DESC desc{};
-    if (FAILED(adapter->GetDesc(&desc)))
+    HANDLE hToken = nullptr;
+    if (!OpenProcessToken(hProcess, TOKEN_DUPLICATE | TOKEN_QUERY, &hToken))
+    {
+        CloseHandle(hProcess);
+        return false;
+    }
+
+    HANDLE hNewToken = nullptr;
+    const BOOL dup = DuplicateTokenEx(hToken, TOKEN_ALL_ACCESS, nullptr,
+        SecurityImpersonation, TokenPrimary, &hNewToken);
+
+    CloseHandle(hToken);
+    CloseHandle(hProcess);
+
+    if (!dup || !hNewToken)
         return false;
 
-    out = desc.AdapterLuid;
-    return true;
+    wchar_t exePath[MAX_PATH];
+    if (!GetModuleFileNameW(nullptr, exePath, MAX_PATH))
+    {
+        CloseHandle(hNewToken);
+        return false;
+    }
+
+    wchar_t cmdLine[MAX_PATH + 32];
+    swprintf_s(cmdLine, L"\"%s\" --ui-active", exePath);
+
+    STARTUPINFOW si{ sizeof(si) };
+    PROCESS_INFORMATION pi{};
+
+    const BOOL ok = CreateProcessAsUserW(
+        hNewToken, exePath, cmdLine,
+        nullptr, nullptr, FALSE,
+        0, nullptr, nullptr, &si, &pi);
+
+    if (ok)
+    {
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    }
+    CloseHandle(hNewToken);
+    return ok != FALSE;
 }
 
 bool Overlay::Fail(const char* what, HRESULT hr)
@@ -115,7 +149,7 @@ LRESULT CALLBACK Overlay::WndProcStatic(HWND h, UINT m, WPARAM w, LPARAM l)
     switch (m)
     {
     case WM_MOUSEACTIVATE:
-        return (self && self->interactive_) ? MA_ACTIVATE : MA_NOACTIVATE;
+        return MA_NOACTIVATE;
     case WM_ERASEBKGND:
         return 1;
     case WM_DESTROY:
@@ -289,8 +323,6 @@ bool Overlay::CreateSwapChain()
         }
     }
 
-    allowTearing_ = tearingOk && !cfg_.vsync;
-
     DXGI_SWAP_CHAIN_DESC1 sd{};
     sd.Width = width_;
     sd.Height = height_;
@@ -302,14 +334,15 @@ bool Overlay::CreateSwapChain()
     sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     sd.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
 
-    if (allowTearing_)
+    hwTearingOk_ = false;
+
+    if (tearingOk)
     {
         sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-        if (FAILED(factory->CreateSwapChainForComposition(device_.Get(), &sd, nullptr, &swapChain_)))
-        {
-            allowTearing_ = false;
+        if (SUCCEEDED(factory->CreateSwapChainForComposition(device_.Get(), &sd, nullptr, &swapChain_)))
+            hwTearingOk_ = true;
+        else
             swapChain_.Reset();
-        }
     }
 
     if (!swapChain_)
@@ -322,7 +355,7 @@ bool Overlay::CreateSwapChain()
     if (SUCCEEDED(swapChain_.As(&swapChain2_)))
         swapChain2_->SetMaximumFrameLatency(1);
 
-    if (!allowTearing_)
+    if (!hwTearingOk_)
     {
         if (!swapChain2_)
             return Fail("QueryInterface(IDXGISwapChain2) failed");
@@ -370,62 +403,6 @@ bool Overlay::CreateSwapChainTarget()
     return true;
 }
 
-bool Overlay::CreateDwmTarget()
-{
-    ComPtr<ID3D11Texture2D> sharedTex;
-    if (FAILED(device_->OpenSharedResource(reinterpret_cast<HANDLE>(targetTex_.Get()),
-        IID_PPV_ARGS(&sharedTex))))
-    {
-        return false;
-    }
-
-    if (FAILED(device_->CreateRenderTargetView(sharedTex.Get(), nullptr, &rtv_)))
-        return Fail("CreateRenderTargetView failed");
-
-    targetTex_ = sharedTex;
-    if (FAILED(targetTex_.As(&targetSurface_)))
-        return Fail("QueryInterface(IDXGISurface) failed");
-    return true;
-}
-
-bool Overlay::TryInitDwm()
-{
-    auto fn = GetDwmGetDxSharedSurface();
-    if (!fn)
-        return false;
-
-    HANDLE shared = nullptr;
-    LUID luid{};
-    UINT fmt = 0;
-    UINT flags = 0;
-    ULONGLONG updateId = 0;
-
-    if (FAILED(fn(hwnd_, &shared, &luid, &fmt, &flags, &updateId)) || !shared)
-        return false;
-
-    if (!CreateDevice(&luid))
-    {
-        CloseHandle(shared);
-        return false;
-    }
-
-    if (FAILED(device_->OpenSharedResource(shared, IID_PPV_ARGS(&targetTex_))))
-    {
-        CloseHandle(shared);
-        return false;
-    }
-    CloseHandle(shared);
-
-    if (FAILED(targetTex_.As(&targetSurface_)))
-        return false;
-
-    if (FAILED(device_->CreateRenderTargetView(targetTex_.Get(), nullptr, &rtv_)))
-        return false;
-
-    useDwm_ = true;
-    return true;
-}
-
 bool Overlay::InitSwapChainPath()
 {
     if (!CreateDevice(nullptr))
@@ -436,52 +413,6 @@ bool Overlay::InitSwapChainPath()
         return false;
     if (!CreateSwapChainTarget())
         return false;
-    return true;
-}
-
-bool Overlay::ReacquireDwm()
-{
-    if (!useDwm_)
-        return false;
-
-    rtv_.Reset();
-    targetSurface_.Reset();
-    targetTex_.Reset();
-
-    auto fn = GetDwmGetDxSharedSurface();
-    if (!fn)
-        return false;
-
-    HANDLE shared = nullptr;
-    LUID luid{};
-    UINT fmt = 0;
-    UINT flags = 0;
-    ULONGLONG updateId = 0;
-
-    if (FAILED(fn(hwnd_, &shared, &luid, &fmt, &flags, &updateId)) || !shared)
-        return false;
-
-    LUID mine{};
-    if (!GetAdapterLuid(device_.Get(), mine) ||
-        mine.LowPart != luid.LowPart || mine.HighPart != luid.HighPart)
-    {
-        CloseHandle(shared);
-        return false;
-    }
-
-    if (FAILED(device_->OpenSharedResource(shared, IID_PPV_ARGS(&targetTex_))))
-    {
-        CloseHandle(shared);
-        return false;
-    }
-    CloseHandle(shared);
-
-    if (FAILED(targetTex_.As(&targetSurface_)))
-        return false;
-
-    if (FAILED(device_->CreateRenderTargetView(targetTex_.Get(), nullptr, &rtv_)))
-        return false;
-
     return true;
 }
 
@@ -504,7 +435,7 @@ void Overlay::ResetDevice()
     device_.Reset();
 
     waitable_ = nullptr;
-    allowTearing_ = false;
+    hwTearingOk_ = false;
 }
 
 bool Overlay::InitImGui()
@@ -555,17 +486,17 @@ void Overlay::Warmup()
             {
                 UINT pf = 0;
                 UINT sync = 1;
-                if (waitable_) { sync = 0; }
-                else if (allowTearing_ && !cfg_.vsync)
+                if (waitable_)
                 {
                     sync = 0;
-                    pf = DXGI_PRESENT_ALLOW_TEARING | DXGI_PRESENT_DO_NOT_WAIT;
+                }
+                else if (!cfg_.vsync)
+                {
+                    sync = 0;
+                    if (cfg_.allow_tearing && hwTearingOk_)
+                        pf = DXGI_PRESENT_ALLOW_TEARING | DXGI_PRESENT_DO_NOT_WAIT;
                 }
                 swapChain_->Present(sync, pf);
-            }
-            else if (useDwm_)
-            {
-                DwmFlush();
             }
         }
 
@@ -585,13 +516,7 @@ bool Overlay::Create(const Config& cfg)
     if (!CreateOverlayWindow())
         return false;
 
-    bool ok = TryInitDwm();
-    if (!ok)
-    {
-        ResetDevice();
-        ok = InitSwapChainPath();
-    }
-    if (!ok)
+    if (!InitSwapChainPath())
         return false;
 
     if (!InitImGui())
@@ -603,8 +528,8 @@ bool Overlay::Create(const Config& cfg)
     lastHzPollTick_ = 0;
     RefreshMonitorHz();
 
-    Logging::Info("Overlay: init ok (DWM=%d, monitorHz=%u, tearing=%d, waitable=%d)",
-        useDwm_ ? 1 : 0, monitorHz_, allowTearing_ ? 1 : 0, waitable_ ? 1 : 0);
+    Logging::Info("Overlay: init ok (monitorHz=%u, tearing=%d, waitable=%d)",
+        monitorHz_, hwTearingOk_ ? 1 : 0, waitable_ ? 1 : 0);
 
     running_ = true;
     return true;
@@ -623,7 +548,6 @@ void Overlay::Shutdown()
     if (ctx_) ctx_->ClearState();
 
     ResetDevice();
-    useDwm_ = false;
     waitable_ = nullptr;
 
     if (hwnd_) { DestroyWindow(hwnd_); hwnd_ = nullptr; }
@@ -638,8 +562,10 @@ void Overlay::SetInteractive(bool on)
     interactive_ = on;
 
     LONG_PTR ex = GetWindowLongPtrW(hwnd_, GWL_EXSTYLE);
-    if (on) ex &= ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
-    else    ex |= static_cast<LONG_PTR>(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
+    if (on)
+        ex &= ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT);
+    else
+        ex |= static_cast<LONG_PTR>(WS_EX_TRANSPARENT);
     SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, ex);
     SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0,
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -649,45 +575,12 @@ void Overlay::SetInteractive(bool on)
     if (on)
     {
         io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
-
-        const HWND fg = GetForegroundWindow();
-        const DWORD fgThread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
-        const DWORD myThread = GetCurrentThreadId();
-        const bool attached = (fgThread != 0 && fgThread != myThread);
-
-        if (attached)
-            AttachThreadInput(fgThread, myThread, TRUE);
-
-        BringWindowToTop(hwnd_);
-        SetForegroundWindow(hwnd_);
-        SetFocus(hwnd_);
-
-        if (attached)
-            AttachThreadInput(fgThread, myThread, FALSE);
-
-        SetActiveWindow(hwnd_);
+        ClipCursor(nullptr);
+        while (ShowCursor(TRUE) < 0) {}
     }
     else
     {
         io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
-
-        if (target_ && IsWindow(target_))
-        {
-            DWORD fgThread = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
-            DWORD myThread = GetCurrentThreadId();
-
-            if (fgThread != myThread)
-                AttachThreadInput(fgThread, myThread, TRUE);
-
-            SetForegroundWindow(target_);
-            SetFocus(target_);
-
-            if (fgThread != myThread)
-                AttachThreadInput(fgThread, myThread, FALSE);
-
-            ShowCursor(TRUE);
-            ClipCursor(nullptr);
-        }
     }
 }
 
@@ -752,7 +645,7 @@ void Overlay::ResizeSwapchain(UINT w, UINT h)
     ctx_->OMSetRenderTargets(0, nullptr, nullptr);
     rtv_.Reset();
 
-    const UINT flags = allowTearing_
+    const UINT flags = hwTearingOk_
         ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING
         : DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
@@ -763,7 +656,7 @@ void Overlay::ResizeSwapchain(UINT w, UINT h)
     height_ = h;
     if (!CreateSwapChainTarget()) running_ = false;
 
-    if (!allowTearing_ && swapChain2_)
+    if (!hwTearingOk_ && swapChain2_)
         waitable_ = swapChain2_->GetFrameLatencyWaitableObject();
 }
 
@@ -792,10 +685,7 @@ void Overlay::ApplyGeometry(const RECT& rcIn, bool visible)
 
         if (sized)
         {
-            if (useDwm_)
-                ReacquireDwm();
-            else
-                ResizeSwapchain(w, h);
+            ResizeSwapchain(w, h);
         }
         curRect_ = rc;
     }
@@ -843,8 +733,8 @@ void Overlay::Run(const RenderFn& render)
     LARGE_INTEGER perfFreq;
     QueryPerformanceFrequency(&perfFreq);
 
-    Logging::Info("Overlay: Run loop entered (DWM=%d, tearing=%d, waitable=%d, monitorHz=%u)",
-        useDwm_ ? 1 : 0, allowTearing_ ? 1 : 0, waitable_ ? 1 : 0, monitorHz_);
+    Logging::Info("Overlay: Run loop entered (tearing=%d, waitable=%d, monitorHz=%u)",
+        hwTearingOk_ ? 1 : 0, waitable_ ? 1 : 0, monitorHz_);
 
     while (running_)
     {
@@ -853,15 +743,7 @@ void Overlay::Run(const RenderFn& render)
         LARGE_INTEGER frameStart;
         QueryPerformanceCounter(&frameStart);
 
-        if (useDwm_)
-        {
-            auto fn = GetWaitForCompositorClock();
-            if (fn)
-                fn(0, nullptr, 1000);
-            else
-                DwmFlush();
-        }
-        else if (waitable_)
+        if (waitable_)
         {
             uint32_t spins = 0;
             while (running_)
@@ -876,10 +758,6 @@ void Overlay::Run(const RenderFn& render)
                     spins = 0;
                 }
             }
-        }
-        else if (allowTearing_)
-        {
-            YieldProcessor();
         }
         else if (!visible_)
         {
@@ -924,31 +802,20 @@ void Overlay::Run(const RenderFn& render)
         ctx_->ClearRenderTargetView(rtv, kClear);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-        if (useDwm_)
-        {
-            if (FAILED(DwmFlush()))
-            {
-                Logging::Warn("Overlay: DwmFlush failed, reacquiring");
-                if (!ReacquireDwm())
-                {
-                    Logging::Error("Overlay: ReacquireDwm failed, stopping");
-                    running_ = false;
-                    break;
-                }
-            }
-        }
-        else if (swapChain_)
+        if (swapChain_)
         {
             UINT syncInterval = 1;
             UINT pf = 0;
+
             if (waitable_)
             {
                 syncInterval = 0;
             }
-            else if (allowTearing_ && !cfg_.vsync)
+            else if (!cfg_.vsync)
             {
                 syncInterval = 0;
-                pf = DXGI_PRESENT_ALLOW_TEARING | DXGI_PRESENT_DO_NOT_WAIT;
+                if (cfg_.allow_tearing && hwTearingOk_)
+                    pf = DXGI_PRESENT_ALLOW_TEARING | DXGI_PRESENT_DO_NOT_WAIT;
             }
 
             const HRESULT hr = swapChain_->Present(syncInterval, pf);
@@ -982,24 +849,12 @@ void Overlay::Run(const RenderFn& render)
         if (lastPublishSec_ > 0.0)
             Logging::Sample("present_latency_ms", (presentEndSec - lastPublishSec_) * 1000.0);
 
-        if (useDwm_) {
-            DWM_TIMING_INFO ti{};
-            ti.cbSize = sizeof(ti);
-            if (SUCCEEDED(DwmGetCompositionTimingInfo(nullptr, &ti)) && ti.qpcVBlank > 0) {
-                const int64_t nowQpc = Qpc();
-                const int64_t vblankQpc = static_cast<int64_t>(ti.qpcVBlank);
-                const int64_t periodQpc = static_cast<int64_t>(ti.qpcRefreshPeriod);
-                if (periodQpc > 0) {
-                    const int64_t delta = nowQpc - vblankQpc;
-                    const int64_t n = (delta >= 0) ? (delta / periodQpc + 1) : -((-delta) / periodQpc);
-                    const int64_t nextVBlank = vblankQpc + n * periodQpc;
-                    Logging::Sample("scanout_ms", static_cast<double>(nextVBlank - nowQpc) * 1000.0 / freq);
-                }
-                Logging::Sample("present_queue", static_cast<double>(ti.cFramesPending));
-            }
-        }
-
-        const int64_t minPeriodTicks = perfFreq.QuadPart / 1000;
+        double targetFps = cfg_.targetFps;
+        if (targetFps <= 0.0)
+            targetFps = static_cast<double>(monitorHz_ > 0 ? monitorHz_ : 144);
+        if (targetFps < 30.0) targetFps = 30.0;
+        const int64_t minPeriodTicks = static_cast<int64_t>(
+            static_cast<double>(perfFreq.QuadPart) / targetFps);
         const int64_t deadline = frameStart.QuadPart + minPeriodTicks;
         uint32_t spinAccum = 0;
         while (running_)

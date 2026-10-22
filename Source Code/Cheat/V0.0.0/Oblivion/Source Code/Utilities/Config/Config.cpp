@@ -62,6 +62,13 @@ static void WriteFlagsBlock(std::ofstream& f, const char* prefix,
 void Config::SetDefaults() {
     show_menu = true;
 
+    aim_enable = false;
+    aim_mode = 0;
+    aim_key = 0;
+    aim_fov = 180.0f;
+    aim_hitbox = 1;
+    aim_smooth = 50.0f;
+
     esp_enemy_enable = false;
     esp_enemy_box = false;
     esp_enemy_box_color[0] = 1.0f; esp_enemy_box_color[1] = 0.2f; esp_enemy_box_color[2] = 0.2f; esp_enemy_box_color[3] = 1.0f;
@@ -170,6 +177,10 @@ void Config::SetDefaults() {
     esp_team_offscreen_distance = 0.35f;
     esp_team_offscreen_size = 22.0f;
 
+    vsync = true;
+    allow_tearing = true;
+    fullscreen_mode = false;
+
     safe_mode = true;
     safe_mode_no_warn = false;
 }
@@ -180,6 +191,14 @@ void Config::Save(const std::string& path) {
 
     file << "[Menu]\n";
     file << "show_menu = " << (show_menu ? "true" : "false") << "\n";
+
+    file << "\n[Aimbot]\n";
+    file << "enable = " << (aim_enable ? "true" : "false") << "\n";
+    file << "mode = " << aim_mode << "\n";
+    file << "key = " << aim_key << "\n";
+    file << "fov = " << aim_fov << "\n";
+    file << "hitbox = " << aim_hitbox << "\n";
+    file << "smooth = " << aim_smooth << "\n";
 
     file << "\n[ESP_Enemy]\n";
     file << "enable = " << (esp_enemy_enable ? "true" : "false") << "\n";
@@ -268,6 +287,11 @@ void Config::Save(const std::string& path) {
         esp_team_flags_money, esp_team_flags_money_color,
         esp_team_flags_ping, esp_team_flags_ping_color,
         esp_team_flags_ammo, esp_team_flags_ammo_color);
+
+    file << "\n[Display]\n";
+    file << "vsync = " << (vsync ? "true" : "false") << "\n";
+    file << "allow_tearing = " << (allow_tearing ? "true" : "false") << "\n";
+    file << "fullscreen_mode = " << (fullscreen_mode ? "true" : "false") << "\n";
 
     file << "\n[Misc]\n";
     file << "safe_mode = " << (safe_mode ? "true" : "false") << "\n";
@@ -365,6 +389,37 @@ void Config::Load(const std::string& path) {
         if (currentSection == "Menu") {
             if (key == "show_menu") show_menu = b;
         }
+        else if (currentSection == "Aimbot") {
+            if (key == "enable") aim_enable = b;
+            else if (key == "mode") {
+                try { aim_mode = std::stoi(value); }
+                catch (...) { aim_mode = 0; }
+                if (aim_mode < 0 || aim_mode > 2) aim_mode = 0;
+            }
+            else if (key == "key") {
+                try { aim_key = std::stoi(value); }
+                catch (...) { aim_key = 0; }
+                if (aim_key < 0 || aim_key > 255) aim_key = 0;
+            }
+            else if (key == "fov") {
+                try { aim_fov = std::stof(value); }
+                catch (...) { aim_fov = 180.0f; }
+                if (aim_fov < 0.0f) aim_fov = 0.0f;
+                if (aim_fov > 180.0f) aim_fov = 180.0f;
+            }
+            else if (key == "hitbox") {
+                try { aim_hitbox = std::stoi(value); }
+                catch (...) { aim_hitbox = 1; }
+                if (aim_hitbox < 0) aim_hitbox = 0;
+                if (aim_hitbox > 127) aim_hitbox = 127;
+            }
+            else if (key == "smooth") {
+                try { aim_smooth = std::stof(value); }
+                catch (...) { aim_smooth = 50.0f; }
+                if (aim_smooth < 0.0f) aim_smooth = 0.0f;
+                if (aim_smooth > 100.0f) aim_smooth = 100.0f;
+            }
+        }
         else if (currentSection == "ESP_Enemy") {
             if (key == "enable") esp_enemy_enable = b;
             else if (key == "box") esp_enemy_box = b;
@@ -458,6 +513,11 @@ void Config::Load(const std::string& path) {
                     esp_team_flags_ammo, esp_team_flags_ammo_color,
                     consumed);
             }
+        }
+        else if (currentSection == "Display") {
+            if (key == "vsync") vsync = b;
+            else if (key == "allow_tearing") allow_tearing = b;
+            else if (key == "fullscreen_mode") fullscreen_mode = b;
         }
         else if (currentSection == "Misc") {
             if (key == "safe_mode") safe_mode = b;
