@@ -1,2 +1,6 @@
-- Reduced ESP desynchronization
-- Reworked ESP positioning
+- Added a loading animation.
+- Simplified the GUI file structure.
+- The software will now wait for CS2 to launch, with a 5-minute timeout, instead of throwing a fatal error if the game isn't running when the software starts.
+- Added Aimbot.
+- Added fullscreen support.
+- Added configurable **Allow Tearing** and **VSync** options to the System tab.
