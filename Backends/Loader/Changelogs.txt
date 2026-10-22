@@ -3,4 +3,7 @@
 - The software will now wait for CS2 to launch, with a 5-minute timeout, instead of throwing a fatal error if the game isn't running when the software starts.
 - Added Aimbot.
 - Added fullscreen support.
-- Added configurable **Allow Tearing** and **VSync** options to the System tab.
+- Added configurable Allow Tearing and VSync options to the System tab.
+- Fullscreen mode is now configurable. When enabled, the overlay takes over the entire screen, 
+which can cause issues with the Windows On-Screen Keyboard (OSK). 
+When disabled, the software uses the standard overlay mode.
