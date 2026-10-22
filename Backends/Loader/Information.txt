@@ -1,3 +1,3 @@
 status = Undetected
-updated = 2026-10-20
-version = BETA 0.3.3
+updated = 2026-10-22
+version = BETA 0.4.3
