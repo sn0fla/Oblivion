@@ -149,7 +149,7 @@ LRESULT CALLBACK Overlay::WndProcStatic(HWND h, UINT m, WPARAM w, LPARAM l)
     switch (m)
     {
     case WM_MOUSEACTIVATE:
-        return MA_NOACTIVATE;
+        return (self && self->interactive_) ? MA_ACTIVATE : MA_NOACTIVATE;
     case WM_ERASEBKGND:
         return 1;
     case WM_DESTROY:
@@ -563,9 +563,9 @@ void Overlay::SetInteractive(bool on)
 
     LONG_PTR ex = GetWindowLongPtrW(hwnd_, GWL_EXSTYLE);
     if (on)
-        ex &= ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT);
+        ex &= ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
     else
-        ex |= static_cast<LONG_PTR>(WS_EX_TRANSPARENT);
+        ex |= static_cast<LONG_PTR>(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
     SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, ex);
     SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0,
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -575,12 +575,82 @@ void Overlay::SetInteractive(bool on)
     if (on)
     {
         io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
-        ClipCursor(nullptr);
+        io.ClearInputKeys();
+        io.ClearInputMouse();
+
+        for (int i = 0; i < 256; ++i) prevKeys_[i] = false;
+        for (int i = 0; i < 5; ++i) prevMouse_[i] = false;
+
+        const HWND fg = GetForegroundWindow();
+        const DWORD fgThread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
+        const DWORD myThread = GetCurrentThreadId();
+        const bool attached = (fgThread != 0 && fgThread != myThread);
+
+        if (attached)
+            AttachThreadInput(fgThread, myThread, TRUE);
+
+        BringWindowToTop(hwnd_);
+        SetForegroundWindow(hwnd_);
+        SetActiveWindow(hwnd_);
+        SetFocus(hwnd_);
+
+        if (attached)
+            AttachThreadInput(fgThread, myThread, FALSE);
+
         while (ShowCursor(TRUE) < 0) {}
+
+        RECT orect{};
+        if (GetWindowRect(hwnd_, &orect))
+            ClipCursor(&orect);
+        else
+            ClipCursor(nullptr);
     }
     else
     {
         io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
+
+        if (target_ && IsWindow(target_))
+        {
+            const HWND fg = GetForegroundWindow();
+            const DWORD fgThread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
+            const DWORD targetThread = GetWindowThreadProcessId(target_, nullptr);
+            const DWORD myThread = GetCurrentThreadId();
+
+            const bool attachFg = (fgThread != 0 && fgThread != myThread);
+            const bool attachTarget = (targetThread != 0 && targetThread != myThread);
+
+            if (attachFg) AttachThreadInput(fgThread, myThread, TRUE);
+            if (attachTarget) AttachThreadInput(targetThread, myThread, TRUE);
+
+            BringWindowToTop(target_);
+            SetForegroundWindow(target_);
+            SetActiveWindow(target_);
+            SetFocus(target_);
+
+            if (attachTarget) AttachThreadInput(targetThread, myThread, FALSE);
+            if (attachFg) AttachThreadInput(fgThread, myThread, FALSE);
+
+            RECT client{};
+            if (GetClientRect(target_, &client))
+            {
+                POINT tl{ client.left, client.top };
+                POINT br{ client.right, client.bottom };
+                ClientToScreen(target_, &tl);
+                ClientToScreen(target_, &br);
+                RECT clip{ tl.x, tl.y, br.x, br.y };
+                ClipCursor(&clip);
+            }
+            else
+            {
+                ClipCursor(nullptr);
+            }
+
+            while (ShowCursor(FALSE) >= 0) {}
+        }
+        else
+        {
+            ClipCursor(nullptr);
+        }
     }
 }
 

@@ -133,8 +133,8 @@ struct Config {
     float esp_team_offscreen_distance = 0.35f;
     float esp_team_offscreen_size = 22.0f;
 
-    bool vsync = true;
-    bool allow_tearing = true;
+    bool vsync = false;
+    bool allow_tearing = false;
     bool fullscreen_mode = false;
 
     bool safe_mode = true;
