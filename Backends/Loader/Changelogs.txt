@@ -1,9 +1,11 @@
-- Added a loading animation.
-- Simplified the GUI file structure.
-- The software will now wait for CS2 to launch, with a 5-minute timeout, instead of throwing a fatal error if the game isn't running when the software starts.
-- Added Aimbot.
-- Added fullscreen support.
-- Added configurable Allow Tearing and VSync options to the System tab.
-- Fullscreen mode is now configurable. When enabled, the overlay takes over the entire screen, 
-which can cause issues with the Windows On-Screen Keyboard (OSK). 
-When disabled, the software uses the standard overlay mode.
+Aimbot
+- Replaced memory writes with read-only `SendInput` using indirect syscalls
+- Reworked the smoothing system
+
+Visuals
+- Added customizable skeleton ESP
+
+System
+- Fixed an issue where the cheat could automatically load, create or save configs without user permission
+- Implemented security improvements
+- Old logs are now automatically deleted at runtime to prevent log accumulation
