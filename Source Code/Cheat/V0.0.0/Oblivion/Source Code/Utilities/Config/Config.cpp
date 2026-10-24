@@ -8,6 +8,8 @@ namespace fs = std::filesystem;
 Config config;
 ConfigBrowser configBrowser;
 
+static constexpr uint32_t kSkelMask = 0x7F;
+
 static void ParseColor(const std::string& v, float out[4]) {
     std::stringstream ss(v);
     std::string tok;
@@ -60,7 +62,7 @@ static void WriteFlagsBlock(std::ofstream& f, const char* prefix,
 }
 
 void Config::SetDefaults() {
-    show_menu = true;
+    show_menu = false;
 
     aim_enable = false;
     aim_mode = 0;
@@ -80,6 +82,8 @@ void Config::SetDefaults() {
     esp_enemy_box_outline_color[0] = 0.0f; esp_enemy_box_outline_color[1] = 0.0f; esp_enemy_box_outline_color[2] = 0.0f; esp_enemy_box_outline_color[3] = 0.85f;
     esp_enemy_skeleton = false;
     esp_enemy_skeleton_color[0] = 1.0f; esp_enemy_skeleton_color[1] = 1.0f; esp_enemy_skeleton_color[2] = 1.0f; esp_enemy_skeleton_color[3] = 1.0f;
+    esp_enemy_skeleton_joints = kSkelMask;
+    esp_enemy_skeleton_draw_joints = false;
     esp_enemy_name = false;
     esp_enemy_name_color[0] = 1.0f; esp_enemy_name_color[1] = 1.0f; esp_enemy_name_color[2] = 1.0f; esp_enemy_name_color[3] = 1.0f;
     esp_enemy_healthbar = false;
@@ -97,25 +101,25 @@ void Config::SetDefaults() {
 
     esp_enemy_flags = false;
     esp_enemy_flags_color[0] = 1.0f; esp_enemy_flags_color[1] = 1.0f; esp_enemy_flags_color[2] = 1.0f; esp_enemy_flags_color[3] = 1.0f;
-    esp_enemy_flags_flashed = true;
+    esp_enemy_flags_flashed = false;
     esp_enemy_flags_flashed_color[0] = 1.0f; esp_enemy_flags_flashed_color[1] = 1.0f; esp_enemy_flags_flashed_color[2] = 0.4f; esp_enemy_flags_flashed_color[3] = 1.0f;
-    esp_enemy_flags_scoped = true;
+    esp_enemy_flags_scoped = false;
     esp_enemy_flags_scoped_color[0] = 0.4f; esp_enemy_flags_scoped_color[1] = 0.8f; esp_enemy_flags_scoped_color[2] = 1.0f; esp_enemy_flags_scoped_color[3] = 1.0f;
-    esp_enemy_flags_defusing = true;
+    esp_enemy_flags_defusing = false;
     esp_enemy_flags_defusing_color[0] = 1.0f; esp_enemy_flags_defusing_color[1] = 0.6f; esp_enemy_flags_defusing_color[2] = 0.2f; esp_enemy_flags_defusing_color[3] = 1.0f;
-    esp_enemy_flags_planting = true;
+    esp_enemy_flags_planting = false;
     esp_enemy_flags_planting_color[0] = 1.0f; esp_enemy_flags_planting_color[1] = 0.3f; esp_enemy_flags_planting_color[2] = 0.3f; esp_enemy_flags_planting_color[3] = 1.0f;
-    esp_enemy_flags_bomb = true;
+    esp_enemy_flags_bomb = false;
     esp_enemy_flags_bomb_color[0] = 0.8f; esp_enemy_flags_bomb_color[1] = 0.4f; esp_enemy_flags_bomb_color[2] = 1.0f; esp_enemy_flags_bomb_color[3] = 1.0f;
-    esp_enemy_flags_armor = true;
+    esp_enemy_flags_armor = false;
     esp_enemy_flags_armor_color[0] = 0.4f; esp_enemy_flags_armor_color[1] = 0.6f; esp_enemy_flags_armor_color[2] = 1.0f; esp_enemy_flags_armor_color[3] = 1.0f;
-    esp_enemy_flags_reloading = true;
+    esp_enemy_flags_reloading = false;
     esp_enemy_flags_reloading_color[0] = 1.0f; esp_enemy_flags_reloading_color[1] = 0.85f; esp_enemy_flags_reloading_color[2] = 0.4f; esp_enemy_flags_reloading_color[3] = 1.0f;
-    esp_enemy_flags_money = true;
+    esp_enemy_flags_money = false;
     esp_enemy_flags_money_color[0] = 0.4f; esp_enemy_flags_money_color[1] = 1.0f; esp_enemy_flags_money_color[2] = 0.4f; esp_enemy_flags_money_color[3] = 1.0f;
-    esp_enemy_flags_ping = true;
+    esp_enemy_flags_ping = false;
     esp_enemy_flags_ping_color[0] = 1.0f; esp_enemy_flags_ping_color[1] = 1.0f; esp_enemy_flags_ping_color[2] = 1.0f; esp_enemy_flags_ping_color[3] = 1.0f;
-    esp_enemy_flags_ammo = true;
+    esp_enemy_flags_ammo = false;
     esp_enemy_flags_ammo_color[0] = 1.0f; esp_enemy_flags_ammo_color[1] = 1.0f; esp_enemy_flags_ammo_color[2] = 1.0f; esp_enemy_flags_ammo_color[3] = 1.0f;
 
     esp_enemy_offscreen = false;
@@ -134,6 +138,8 @@ void Config::SetDefaults() {
     esp_team_box_outline_color[0] = 0.0f; esp_team_box_outline_color[1] = 0.0f; esp_team_box_outline_color[2] = 0.0f; esp_team_box_outline_color[3] = 0.85f;
     esp_team_skeleton = false;
     esp_team_skeleton_color[0] = 1.0f; esp_team_skeleton_color[1] = 1.0f; esp_team_skeleton_color[2] = 1.0f; esp_team_skeleton_color[3] = 1.0f;
+    esp_team_skeleton_joints = kSkelMask;
+    esp_team_skeleton_draw_joints = false;
     esp_team_name = false;
     esp_team_name_color[0] = 1.0f; esp_team_name_color[1] = 1.0f; esp_team_name_color[2] = 1.0f; esp_team_name_color[3] = 1.0f;
     esp_team_healthbar = false;
@@ -151,25 +157,25 @@ void Config::SetDefaults() {
 
     esp_team_flags = false;
     esp_team_flags_color[0] = 1.0f; esp_team_flags_color[1] = 1.0f; esp_team_flags_color[2] = 1.0f; esp_team_flags_color[3] = 1.0f;
-    esp_team_flags_flashed = true;
+    esp_team_flags_flashed = false;
     esp_team_flags_flashed_color[0] = 1.0f; esp_team_flags_flashed_color[1] = 1.0f; esp_team_flags_flashed_color[2] = 0.4f; esp_team_flags_flashed_color[3] = 1.0f;
-    esp_team_flags_scoped = true;
+    esp_team_flags_scoped = false;
     esp_team_flags_scoped_color[0] = 0.4f; esp_team_flags_scoped_color[1] = 0.8f; esp_team_flags_scoped_color[2] = 1.0f; esp_team_flags_scoped_color[3] = 1.0f;
-    esp_team_flags_defusing = true;
+    esp_team_flags_defusing = false;
     esp_team_flags_defusing_color[0] = 1.0f; esp_team_flags_defusing_color[1] = 0.6f; esp_team_flags_defusing_color[2] = 0.2f; esp_team_flags_defusing_color[3] = 1.0f;
-    esp_team_flags_planting = true;
+    esp_team_flags_planting = false;
     esp_team_flags_planting_color[0] = 1.0f; esp_team_flags_planting_color[1] = 0.3f; esp_team_flags_planting_color[2] = 0.3f; esp_team_flags_planting_color[3] = 1.0f;
-    esp_team_flags_bomb = true;
+    esp_team_flags_bomb = false;
     esp_team_flags_bomb_color[0] = 0.8f; esp_team_flags_bomb_color[1] = 0.4f; esp_team_flags_bomb_color[2] = 1.0f; esp_team_flags_bomb_color[3] = 1.0f;
-    esp_team_flags_armor = true;
+    esp_team_flags_armor = false;
     esp_team_flags_armor_color[0] = 0.4f; esp_team_flags_armor_color[1] = 0.6f; esp_team_flags_armor_color[2] = 1.0f; esp_team_flags_armor_color[3] = 1.0f;
-    esp_team_flags_reloading = true;
+    esp_team_flags_reloading = false;
     esp_team_flags_reloading_color[0] = 1.0f; esp_team_flags_reloading_color[1] = 0.85f; esp_team_flags_reloading_color[2] = 0.4f; esp_team_flags_reloading_color[3] = 1.0f;
-    esp_team_flags_money = true;
+    esp_team_flags_money = false;
     esp_team_flags_money_color[0] = 0.4f; esp_team_flags_money_color[1] = 1.0f; esp_team_flags_money_color[2] = 0.4f; esp_team_flags_money_color[3] = 1.0f;
-    esp_team_flags_ping = true;
+    esp_team_flags_ping = false;
     esp_team_flags_ping_color[0] = 1.0f; esp_team_flags_ping_color[1] = 1.0f; esp_team_flags_ping_color[2] = 1.0f; esp_team_flags_ping_color[3] = 1.0f;
-    esp_team_flags_ammo = true;
+    esp_team_flags_ammo = false;
     esp_team_flags_ammo_color[0] = 1.0f; esp_team_flags_ammo_color[1] = 1.0f; esp_team_flags_ammo_color[2] = 1.0f; esp_team_flags_ammo_color[3] = 1.0f;
 
     esp_team_offscreen = false;
@@ -177,8 +183,8 @@ void Config::SetDefaults() {
     esp_team_offscreen_distance = 0.35f;
     esp_team_offscreen_size = 22.0f;
 
-    vsync = true;
-    allow_tearing = true;
+    vsync = false;
+    allow_tearing = false;
     fullscreen_mode = false;
 
     safe_mode = true;
@@ -208,6 +214,8 @@ void Config::Save(const std::string& path) {
     file << "fill = " << (esp_enemy_box_style_fill ? "true" : "false") << "\n";
     file << "outline = " << (esp_enemy_box_outline ? "true" : "false") << "\n";
     file << "skeleton = " << (esp_enemy_skeleton ? "true" : "false") << "\n";
+    file << "skeleton_joints = " << (esp_enemy_skeleton_joints & kSkelMask) << "\n";
+    file << "skeleton_draw_joints = " << (esp_enemy_skeleton_draw_joints ? "true" : "false") << "\n";
     file << "name = " << (esp_enemy_name ? "true" : "false") << "\n";
     file << "healthbar = " << (esp_enemy_healthbar ? "true" : "false") << "\n";
     file << "distance = " << (esp_enemy_distance ? "true" : "false") << "\n";
@@ -252,6 +260,8 @@ void Config::Save(const std::string& path) {
     file << "fill = " << (esp_team_box_style_fill ? "true" : "false") << "\n";
     file << "outline = " << (esp_team_box_outline ? "true" : "false") << "\n";
     file << "skeleton = " << (esp_team_skeleton ? "true" : "false") << "\n";
+    file << "skeleton_joints = " << (esp_team_skeleton_joints & kSkelMask) << "\n";
+    file << "skeleton_draw_joints = " << (esp_team_skeleton_draw_joints ? "true" : "false") << "\n";
     file << "name = " << (esp_team_name ? "true" : "false") << "\n";
     file << "healthbar = " << (esp_team_healthbar ? "true" : "false") << "\n";
     file << "distance = " << (esp_team_distance ? "true" : "false") << "\n";
@@ -428,6 +438,11 @@ void Config::Load(const std::string& path) {
             else if (key == "fill") esp_enemy_box_style_fill = b;
             else if (key == "outline") esp_enemy_box_outline = b;
             else if (key == "skeleton") esp_enemy_skeleton = b;
+            else if (key == "skeleton_joints") {
+                try { esp_enemy_skeleton_joints = static_cast<uint32_t>(std::stoul(value)) & kSkelMask; }
+                catch (...) { esp_enemy_skeleton_joints = kSkelMask; }
+            }
+            else if (key == "skeleton_draw_joints") esp_enemy_skeleton_draw_joints = b;
             else if (key == "name") esp_enemy_name = b;
             else if (key == "healthbar") esp_enemy_healthbar = b;
             else if (key == "distance") esp_enemy_distance = b;
@@ -475,6 +490,11 @@ void Config::Load(const std::string& path) {
             else if (key == "fill") esp_team_box_style_fill = b;
             else if (key == "outline") esp_team_box_outline = b;
             else if (key == "skeleton") esp_team_skeleton = b;
+            else if (key == "skeleton_joints") {
+                try { esp_team_skeleton_joints = static_cast<uint32_t>(std::stoul(value)) & kSkelMask; }
+                catch (...) { esp_team_skeleton_joints = kSkelMask; }
+            }
+            else if (key == "skeleton_draw_joints") esp_team_skeleton_draw_joints = b;
             else if (key == "name") esp_team_name = b;
             else if (key == "healthbar") esp_team_healthbar = b;
             else if (key == "distance") esp_team_distance = b;

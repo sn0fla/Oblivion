@@ -44,6 +44,22 @@ namespace Logging {
             s.wHour, s.wMinute, s.wSecond, s.wMilliseconds);
     }
 
+    static void PrepareLogDir() {
+        CreateDirectoryA("C:\\Oblivion", nullptr);
+        CreateDirectoryA("C:\\Oblivion\\Logs", nullptr);
+
+        WIN32_FIND_DATAA fd;
+        HANDLE hFind = FindFirstFileA("C:\\Oblivion\\Logs\\*", &fd);
+        if (hFind == INVALID_HANDLE_VALUE) return;
+        do {
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+            char fullPath[MAX_PATH * 2];
+            snprintf(fullPath, sizeof(fullPath), "C:\\Oblivion\\Logs\\%s", fd.cFileName);
+            DeleteFileA(fullPath);
+        } while (FindNextFileA(hFind, &fd));
+        FindClose(hFind);
+    }
+
     static void VWrite(const char* lvl, const char* fmt, va_list ap) {
         if (!g_init.load(std::memory_order_relaxed)) return;
         std::lock_guard<std::mutex> lk(g_mtx);
@@ -75,10 +91,8 @@ namespace Logging {
         if (!g_init.load(std::memory_order_relaxed)) return;
         const double now = NowSec();
         if (now - g_lastFlush.load(std::memory_order_relaxed) < 1.0) return;
-
         std::lock_guard<std::mutex> lk(g_mtx);
         if (!g_file) return;
-
         char ts[24]; Stamp(ts, sizeof(ts));
         fprintf(g_file, "[%s][LAT] uptime=%.1fs\n", ts,
             now - g_start.load(std::memory_order_relaxed));
@@ -107,16 +121,13 @@ namespace Logging {
     LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
         static std::atomic<bool> inHandler{ false };
         if (inHandler.exchange(true)) return EXCEPTION_EXECUTE_HANDLER;
-
         FILE* f = g_file;
         if (!f) return EXCEPTION_EXECUTE_HANDLER;
-
         char ts[24]; Stamp(ts, sizeof(ts));
         fprintf(f, "\n[%s][CRASH] =============== UNHANDLED EXCEPTION ===============\n", ts);
         fprintf(f, "[CRASH] PID=%lu TID=%lu uptime=%.1fs\n",
             GetCurrentProcessId(), GetCurrentThreadId(),
             NowSec() - g_start.load(std::memory_order_relaxed));
-
         if (ep && ep->ExceptionRecord) {
             auto* er = ep->ExceptionRecord;
             fprintf(f, "[CRASH] Code:    0x%08X\n", er->ExceptionCode);
@@ -127,7 +138,6 @@ namespace Logging {
             for (DWORD i = 0; i < er->NumberParameters && i < 15; ++i)
                 fprintf(f, "  [%u] 0x%016llX\n", i,
                     static_cast<unsigned long long>(er->ExceptionInformation[i]));
-
             HMODULE mod = nullptr;
             if (GetModuleHandleExA(
                 GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -139,7 +149,6 @@ namespace Logging {
                         reinterpret_cast<uintptr_t>(mod)));
             }
         }
-
         if (ep && ep->ContextRecord) {
             auto* c = ep->ContextRecord;
 #if defined(_M_X64)
@@ -150,7 +159,6 @@ namespace Logging {
             fprintf(f, "[CRASH] R14=%016llX R15=%016llX\n", c->R14, c->R15);
 #endif
         }
-
         if (ep && ep->ContextRecord) {
             HANDLE proc = GetCurrentProcess();
             SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
@@ -183,7 +191,6 @@ namespace Logging {
                 SymCleanup(proc);
             }
         }
-
         if (ep) {
             char dumpPath[MAX_PATH + 16];
             snprintf(dumpPath, sizeof(dumpPath), "%s.dmp", g_path.c_str());
@@ -202,7 +209,6 @@ namespace Logging {
                 fprintf(f, "[CRASH] Minidump: %s\n", dumpPath);
             }
         }
-
         fprintf(f, "[CRASH] ======================================================\n");
         fflush(f);
         return EXCEPTION_EXECUTE_HANDLER;
@@ -213,20 +219,17 @@ namespace Logging {
         std::set_terminate(TerminateHandler);
     }
 
-    bool Init(const std::string& dir) {
+    bool Init() {
         if (g_init.load(std::memory_order_relaxed)) return true;
         std::lock_guard<std::mutex> lk(g_mtx);
 
-        CreateDirectoryA("C:\\Oblivion", nullptr);
-        CreateDirectoryA(dir.c_str(), nullptr);
+        PrepareLogDir();
 
         SYSTEMTIME s; GetLocalTime(&s);
-        char name[512];
+        char name[MAX_PATH * 2];
         snprintf(name, sizeof(name),
-            "%s\\log_%04u%02u%02u_%02u%02u%02u_pid%lu.txt",
-            dir.c_str(),
-            s.wYear, s.wMonth, s.wDay, s.wHour, s.wMinute, s.wSecond,
-            GetCurrentProcessId());
+            "C:\\Oblivion\\Logs\\log_%04u%02u%02u_%02u%02u%02u.log",
+            s.wYear, s.wMonth, s.wDay, s.wHour, s.wMinute, s.wSecond);
         g_path = name;
 
         if (fopen_s(&g_file, g_path.c_str(), "w") != 0 || !g_file) {
@@ -260,5 +263,4 @@ namespace Logging {
         }
         g_buckets.clear();
     }
-
 }

@@ -189,6 +189,14 @@ namespace Widgets {
         "Fill",
         "Outline",
         "Skeleton",
+        "Head",
+        "Torso",
+        "Left Arm",
+        "Right Arm",
+        "Left Leg",
+        "Right Leg",
+        "Feet",
+        "Draw Joints",
         "Name",
         "Healthbar",
         "Distance",
@@ -212,8 +220,12 @@ namespace Widgets {
     };
 
     static const bool kIndented[kEspItemCount] = {
-        false, false, true, true, true, true,
-        false, false, false, false, false, false, false, false,
+        false,
+        false,
+        true, true, true, true,
+        false,
+        true, true, true, true, true, true, true, true,
+        false, false, false, false, false, false, false,
         false,
         true, true, true, true, true, true, true, true, true,
         false,
@@ -231,14 +243,15 @@ namespace Widgets {
     static constexpr float kColorW = 38.0f;
     static constexpr float kColorGap = 6.0f;
 
-    float RowAlpha(int idx, float expandBox, float expandFlags, float expandOffscreen) {
+    float RowAlpha(int idx, float expandBox, float expandSkel, float expandFlags, float expandOffscreen) {
         if (idx >= 2 && idx <= 5) return expandBox;
-        if (idx >= 15 && idx <= 23) return expandFlags;
-        if (idx == 25 || idx == 26) return expandOffscreen;
+        if (idx >= 7 && idx <= 14) return expandSkel;
+        if (idx >= 23 && idx <= 31) return expandFlags;
+        if (idx == 33 || idx == 34) return expandOffscreen;
         return 1.0f;
     }
 
-    float RowOffsetY(int idx, float expandBox, float expandFlags, float expandOffscreen) {
+    float RowOffsetY(int idx, float expandBox, float expandSkel, float expandFlags, float expandOffscreen) {
         float y = kTopOffset;
         if (idx == 0) return y;
         y += kRowH;
@@ -248,17 +261,25 @@ namespace Widgets {
             if (idx == i) return y;
             y += kRowH * expandBox;
         }
-        for (int i = 6; i <= 14; ++i) {
+        if (idx == 6) return y;
+        y += kRowH;
+        for (int i = 7; i <= 14; ++i) {
+            if (idx == i) return y;
+            y += kRowH * expandSkel;
+        }
+        for (int i = 15; i <= 21; ++i) {
             if (idx == i) return y;
             y += kRowH;
         }
-        for (int i = 15; i <= 23; ++i) {
+        if (idx == 22) return y;
+        y += kRowH;
+        for (int i = 23; i <= 31; ++i) {
             if (idx == i) return y;
             y += kRowH * expandFlags;
         }
-        if (idx == 24) return y;
+        if (idx == 32) return y;
         y += kRowH;
-        for (int i = 25; i <= 26; ++i) {
+        for (int i = 33; i <= 34; ++i) {
             if (idx == i) return y;
             y += (kRowH + kSliderRowH) * expandOffscreen;
         }
@@ -266,14 +287,14 @@ namespace Widgets {
     }
 
     float RowCenterY(ImVec2 cardMin, int idx,
-        float expandBox, float expandFlags, float expandOffscreen, float s)
+        float expandBox, float expandSkel, float expandFlags, float expandOffscreen, float s)
     {
-        const float y = RowOffsetY(idx, expandBox, expandFlags, expandOffscreen) + kRowH * 0.5f;
+        const float y = RowOffsetY(idx, expandBox, expandSkel, expandFlags, expandOffscreen) + kRowH * 0.5f;
         return cardMin.y + y * s;
     }
 
-    float ContentHeight(float expandBox, float expandFlags, float expandOffscreen) {
-        return RowOffsetY(26, expandBox, expandFlags, expandOffscreen)
+    float ContentHeight(float expandBox, float expandSkel, float expandFlags, float expandOffscreen) {
+        return RowOffsetY(34, expandBox, expandSkel, expandFlags, expandOffscreen)
             + (kRowH + kSliderRowH) * expandOffscreen + 14.0f;
     }
 
@@ -282,14 +303,6 @@ namespace Widgets {
         case 1:
         case 4:
         case 6:
-        case 7:
-        case 8:
-        case 9:
-        case 10:
-        case 11:
-        case 12:
-        case 13:
-        case 14:
         case 15:
         case 16:
         case 17:
@@ -300,6 +313,14 @@ namespace Widgets {
         case 22:
         case 23:
         case 24:
+        case 25:
+        case 26:
+        case 27:
+        case 28:
+        case 29:
+        case 30:
+        case 31:
+        case 32:
             return true;
         default:
             return false;
@@ -307,15 +328,19 @@ namespace Widgets {
     }
 
     bool IsSliderRow(int idx) {
-        return idx == 25 || idx == 26;
+        return idx == 33 || idx == 34;
+    }
+
+    bool IsSkeletonJoint(int idx) {
+        return idx >= 7 && idx <= 13;
     }
 
     Rect GetCheckboxRect(ImVec2 cardMin, ImVec2 cardMax, int idx,
-        float expandBox, float expandFlags, float expandOffscreen, float s)
+        float expandBox, float expandSkel, float expandFlags, float expandOffscreen, float s)
     {
         const float cbSize = kCbSize * s;
         const float pad = kPad * s;
-        const float cy = RowCenterY(cardMin, idx, expandBox, expandFlags, expandOffscreen, s);
+        const float cy = RowCenterY(cardMin, idx, expandBox, expandSkel, expandFlags, expandOffscreen, s);
         const float x1 = cardMax.x - pad;
         const float x0 = x1 - cbSize;
         const float y0 = cy - cbSize * 0.5f;
@@ -323,13 +348,13 @@ namespace Widgets {
     }
 
     Rect GetColorRect(ImVec2 cardMin, ImVec2 cardMax, int idx,
-        float expandBox, float expandFlags, float expandOffscreen, float s)
+        float expandBox, float expandSkel, float expandFlags, float expandOffscreen, float s)
     {
         const float cbSize = kCbSize * s;
         const float colorW = kColorW * s;
         const float pad = kPad * s;
         const float gap = kColorGap * s;
-        const float cy = RowCenterY(cardMin, idx, expandBox, expandFlags, expandOffscreen, s);
+        const float cy = RowCenterY(cardMin, idx, expandBox, expandSkel, expandFlags, expandOffscreen, s);
         const float x1 = cardMax.x - pad - cbSize - gap;
         const float x0 = x1 - colorW;
         const float y0 = cy - cbSize * 0.5f;
@@ -337,11 +362,11 @@ namespace Widgets {
     }
 
     Rect GetSliderRect(ImVec2 cardMin, ImVec2 cardMax, int idx,
-        float expandBox, float expandFlags, float expandOffscreen, float s)
+        float expandBox, float expandSkel, float expandFlags, float expandOffscreen, float s)
     {
         const float pad = kPad * s;
         const float indent = kIndent * s;
-        const float yOff = RowOffsetY(idx, expandBox, expandFlags, expandOffscreen);
+        const float yOff = RowOffsetY(idx, expandBox, expandSkel, expandFlags, expandOffscreen);
         const float x0 = cardMin.x + pad + indent;
         const float x1 = cardMax.x - pad;
         const float y0 = cardMin.y + (yOff + kRowH - 3.0f) * s;
@@ -350,12 +375,12 @@ namespace Widgets {
     }
 
     static Rect MakeExpanderRect(ImVec2 cardMin, int rowIdx,
-        float expandBox, float expandFlags, float expandOffscreen,
+        float expandBox, float expandSkel, float expandFlags, float expandOffscreen,
         float s, ImFont* font, float labelFs, const char* label)
     {
         const float pad = kPad * s;
         const float iconSz = kExpIconSz * s;
-        const float cy = RowCenterY(cardMin, rowIdx, expandBox, expandFlags, expandOffscreen, s);
+        const float cy = RowCenterY(cardMin, rowIdx, expandBox, expandSkel, expandFlags, expandOffscreen, s);
         const float lx = cardMin.x + pad;
 
         float textW = 0.0f;
@@ -374,29 +399,38 @@ namespace Widgets {
     }
 
     Rect GetExpanderRect(ImVec2 cardMin, ImVec2 cardMax, float s,
-        float expandBox, float expandFlags, float expandOffscreen,
+        float expandBox, float expandSkel, float expandFlags, float expandOffscreen,
         ImFont* font, float labelFs)
     {
         (void)cardMax;
-        return MakeExpanderRect(cardMin, 1, expandBox, expandFlags, expandOffscreen,
+        return MakeExpanderRect(cardMin, 1, expandBox, expandSkel, expandFlags, expandOffscreen,
             s, font, labelFs, "Box");
     }
 
-    Rect GetFlagsExpanderRect(ImVec2 cardMin, ImVec2 cardMax, float s,
-        float expandBox, float expandFlags, float expandOffscreen,
+    Rect GetSkelExpanderRect(ImVec2 cardMin, ImVec2 cardMax, float s,
+        float expandBox, float expandSkel, float expandFlags, float expandOffscreen,
         ImFont* font, float labelFs)
     {
         (void)cardMax;
-        return MakeExpanderRect(cardMin, 14, expandBox, expandFlags, expandOffscreen,
+        return MakeExpanderRect(cardMin, 6, expandBox, expandSkel, expandFlags, expandOffscreen,
+            s, font, labelFs, "Skeleton");
+    }
+
+    Rect GetFlagsExpanderRect(ImVec2 cardMin, ImVec2 cardMax, float s,
+        float expandBox, float expandSkel, float expandFlags, float expandOffscreen,
+        ImFont* font, float labelFs)
+    {
+        (void)cardMax;
+        return MakeExpanderRect(cardMin, 22, expandBox, expandSkel, expandFlags, expandOffscreen,
             s, font, labelFs, "Flags");
     }
 
     Rect GetOffscreenExpanderRect(ImVec2 cardMin, ImVec2 cardMax, float s,
-        float expandBox, float expandFlags, float expandOffscreen,
+        float expandBox, float expandSkel, float expandFlags, float expandOffscreen,
         ImFont* font, float labelFs)
     {
         (void)cardMax;
-        return MakeExpanderRect(cardMin, 24, expandBox, expandFlags, expandOffscreen,
+        return MakeExpanderRect(cardMin, 32, expandBox, expandSkel, expandFlags, expandOffscreen,
             s, font, labelFs, "Offscreen");
     }
 
@@ -423,6 +457,7 @@ namespace Widgets {
         const float* hover, const float* sel,
         const float* colorHover, const float* const* colors,
         float expandBox, float expanderBoxHover,
+        float expandSkel, float expanderSkelHover,
         float expandFlags, float expanderFlagsHover,
         float expandOffscreen, float expanderOffscreenHover,
         ImFont* font, float labelFs, float s,
@@ -441,7 +476,7 @@ namespace Widgets {
         const float iconSz = kExpIconSz * s;
 
         for (int i = 0; i < kEspItemCount; ++i) {
-            const float rowA = RowAlpha(i, expandBox, expandFlags, expandOffscreen);
+            const float rowA = RowAlpha(i, expandBox, expandSkel, expandFlags, expandOffscreen);
             if (rowA < 0.01f) continue;
 
             const float rowAlpha = alpha * rowA;
@@ -451,7 +486,7 @@ namespace Widgets {
                     const char* label = kLabels[i];
                     const float indent = kIndented[i] ? kIndent * s : 0.0f;
                     const float lx = min.x + pad + indent;
-                    const float cy = RowCenterY(min, i, expandBox, expandFlags, expandOffscreen, s);
+                    const float cy = RowCenterY(min, i, expandBox, expandSkel, expandFlags, expandOffscreen, s);
                     const ImVec2 lsz = font->CalcTextSizeA(
                         labelFs, FLT_MAX, 0.0f, label);
                     const float ly = cy - lsz.y * 0.5f;
@@ -464,7 +499,7 @@ namespace Widgets {
                 continue;
             }
 
-            Rect cb = GetCheckboxRect(min, max, i, expandBox, expandFlags, expandOffscreen, s);
+            Rect cb = GetCheckboxRect(min, max, i, expandBox, expandSkel, expandFlags, expandOffscreen, s);
 
             const float hv = hover[i];
             const float sv = sel[i];
@@ -487,7 +522,7 @@ namespace Widgets {
             }
 
             if (HasColor(i) && colors && colors[i]) {
-                Rect cr = GetColorRect(min, max, i, expandBox, expandFlags, expandOffscreen, s);
+                Rect cr = GetColorRect(min, max, i, expandBox, expandSkel, expandFlags, expandOffscreen, s);
 
                 const float chv = colorHover ? colorHover[i] : 0.0f;
 
@@ -519,7 +554,7 @@ namespace Widgets {
                 float indent = kIndented[i] ? kIndent * s : 0.0f;
 
                 const float lx = min.x + pad + indent;
-                const float cy = RowCenterY(min, i, expandBox, expandFlags, expandOffscreen, s);
+                const float cy = RowCenterY(min, i, expandBox, expandSkel, expandFlags, expandOffscreen, s);
                 const float ly = cy - lsz.y * 0.5f;
 
                 const int lr = (int)(190 + (235 - 190) * st);
@@ -533,8 +568,8 @@ namespace Widgets {
         }
 
         {
-            Rect ex = GetExpanderRect(min, max, s, expandBox, expandFlags,
-                expandOffscreen, font, labelFs);
+            Rect ex = GetExpanderRect(min, max, s, expandBox, expandSkel,
+                expandFlags, expandOffscreen, font, labelFs);
             const ImVec2 c((ex.min.x + ex.max.x) * 0.5f,
                 (ex.min.y + ex.max.y) * 0.5f);
             const float ev = expanderBoxHover;
@@ -547,8 +582,22 @@ namespace Widgets {
         }
 
         {
-            Rect fex = GetFlagsExpanderRect(min, max, s, expandBox, expandFlags,
-                expandOffscreen, font, labelFs);
+            Rect sex = GetSkelExpanderRect(min, max, s, expandBox, expandSkel,
+                expandFlags, expandOffscreen, font, labelFs);
+            const ImVec2 c((sex.min.x + sex.max.x) * 0.5f,
+                (sex.min.y + sex.max.y) * 0.5f);
+            const float ev = expanderSkelHover;
+            const int eR = (int)(150 + (189 - 150) * ev);
+            const int eG = (int)(140 + (176 - 140) * ev);
+            const int eB = (int)(205 + (255 - 205) * ev);
+            const ImU32 eCol = IM_COL32(eR, eG, eB, (int)(alpha * 255.0f));
+            const float angle = (1.5707963f) * expandSkel;
+            DrawChevron(dl, c, iconSz, angle, eCol, 1.6f * s);
+        }
+
+        {
+            Rect fex = GetFlagsExpanderRect(min, max, s, expandBox, expandSkel,
+                expandFlags, expandOffscreen, font, labelFs);
             const ImVec2 c((fex.min.x + fex.max.x) * 0.5f,
                 (fex.min.y + fex.max.y) * 0.5f);
             const float ev = expanderFlagsHover;
@@ -561,8 +610,8 @@ namespace Widgets {
         }
 
         {
-            Rect oex = GetOffscreenExpanderRect(min, max, s, expandBox, expandFlags,
-                expandOffscreen, font, labelFs);
+            Rect oex = GetOffscreenExpanderRect(min, max, s, expandBox, expandSkel,
+                expandFlags, expandOffscreen, font, labelFs);
             const ImVec2 c((oex.min.x + oex.max.x) * 0.5f,
                 (oex.min.y + oex.max.y) * 0.5f);
             const float ev = expanderOffscreenHover;

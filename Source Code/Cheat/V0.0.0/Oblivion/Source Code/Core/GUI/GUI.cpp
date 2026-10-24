@@ -45,6 +45,10 @@ namespace GUI {
     float g_espExpandT[2] = { 0.0f, 0.0f };
     float g_espExpanderHover[2] = { 0.0f, 0.0f };
 
+    bool  g_skelExpanded[2] = { false, false };
+    float g_skelExpandT[2] = { 0.0f, 0.0f };
+    float g_skelExpanderHover[2] = { 0.0f, 0.0f };
+
     bool  g_flagsExpanded[2] = { false, false };
     float g_flagsExpandT[2] = { 0.0f, 0.0f };
     float g_flagsExpanderHover[2] = { 0.0f, 0.0f };
@@ -149,24 +153,24 @@ namespace GUI {
             case 1:  return config.esp_enemy_box_color;
             case 4:  return config.esp_enemy_box_fill_color;
             case 6:  return config.esp_enemy_skeleton_color;
-            case 7:  return config.esp_enemy_name_color;
-            case 8:  return config.esp_enemy_healthbar_color;
-            case 9:  return config.esp_enemy_distance_color;
-            case 10: return config.esp_enemy_headcircle_color;
-            case 11: return config.esp_enemy_snapline_color;
-            case 12: return config.esp_enemy_viewdirection_color;
-            case 13: return config.esp_enemy_weapon_color;
-            case 14: return config.esp_enemy_flags_color;
-            case 15: return config.esp_enemy_flags_flashed_color;
-            case 16: return config.esp_enemy_flags_scoped_color;
-            case 17: return config.esp_enemy_flags_defusing_color;
-            case 18: return config.esp_enemy_flags_planting_color;
-            case 19: return config.esp_enemy_flags_bomb_color;
-            case 20: return config.esp_enemy_flags_armor_color;
-            case 21: return config.esp_enemy_flags_reloading_color;
-            case 22: return config.esp_enemy_flags_money_color;
-            case 23: return config.esp_enemy_flags_ammo_color;
-            case 24: return config.esp_enemy_offscreen_color;
+            case 15: return config.esp_enemy_name_color;
+            case 16: return config.esp_enemy_healthbar_color;
+            case 17: return config.esp_enemy_distance_color;
+            case 18: return config.esp_enemy_headcircle_color;
+            case 19: return config.esp_enemy_snapline_color;
+            case 20: return config.esp_enemy_viewdirection_color;
+            case 21: return config.esp_enemy_weapon_color;
+            case 22: return config.esp_enemy_flags_color;
+            case 23: return config.esp_enemy_flags_flashed_color;
+            case 24: return config.esp_enemy_flags_scoped_color;
+            case 25: return config.esp_enemy_flags_defusing_color;
+            case 26: return config.esp_enemy_flags_planting_color;
+            case 27: return config.esp_enemy_flags_bomb_color;
+            case 28: return config.esp_enemy_flags_armor_color;
+            case 29: return config.esp_enemy_flags_reloading_color;
+            case 30: return config.esp_enemy_flags_money_color;
+            case 31: return config.esp_enemy_flags_ammo_color;
+            case 32: return config.esp_enemy_offscreen_color;
             default: return nullptr;
             }
         }
@@ -175,24 +179,24 @@ namespace GUI {
             case 1:  return config.esp_team_box_color;
             case 4:  return config.esp_team_box_fill_color;
             case 6:  return config.esp_team_skeleton_color;
-            case 7:  return config.esp_team_name_color;
-            case 8:  return config.esp_team_healthbar_color;
-            case 9:  return config.esp_team_distance_color;
-            case 10: return config.esp_team_headcircle_color;
-            case 11: return config.esp_team_snapline_color;
-            case 12: return config.esp_team_viewdirection_color;
-            case 13: return config.esp_team_weapon_color;
-            case 14: return config.esp_team_flags_color;
-            case 15: return config.esp_team_flags_flashed_color;
-            case 16: return config.esp_team_flags_scoped_color;
-            case 17: return config.esp_team_flags_defusing_color;
-            case 18: return config.esp_team_flags_planting_color;
-            case 19: return config.esp_team_flags_bomb_color;
-            case 20: return config.esp_team_flags_armor_color;
-            case 21: return config.esp_team_flags_reloading_color;
-            case 22: return config.esp_team_flags_money_color;
-            case 23: return config.esp_team_flags_ammo_color;
-            case 24: return config.esp_team_offscreen_color;
+            case 15: return config.esp_team_name_color;
+            case 16: return config.esp_team_healthbar_color;
+            case 17: return config.esp_team_distance_color;
+            case 18: return config.esp_team_headcircle_color;
+            case 19: return config.esp_team_snapline_color;
+            case 20: return config.esp_team_viewdirection_color;
+            case 21: return config.esp_team_weapon_color;
+            case 22: return config.esp_team_flags_color;
+            case 23: return config.esp_team_flags_flashed_color;
+            case 24: return config.esp_team_flags_scoped_color;
+            case 25: return config.esp_team_flags_defusing_color;
+            case 26: return config.esp_team_flags_planting_color;
+            case 27: return config.esp_team_flags_bomb_color;
+            case 28: return config.esp_team_flags_armor_color;
+            case 29: return config.esp_team_flags_reloading_color;
+            case 30: return config.esp_team_flags_money_color;
+            case 31: return config.esp_team_flags_ammo_color;
+            case 32: return config.esp_team_offscreen_color;
             default: return nullptr;
             }
         }
@@ -1294,7 +1298,6 @@ namespace GUI {
             if (hov && ImGui::IsMouseClicked(0)) {
                 Framework::PlayClickSound();
                 config.fullscreen_mode = !config.fullscreen_mode;
-                config.Save("config.ini");
             }
         }
 
@@ -1478,7 +1481,7 @@ namespace GUI {
     }
 
     static void PlaceOffscreenSliders(ImDrawList* dl, ImVec2 drawMin, ImVec2 drawMax,
-        float expandBox, float expandFlags, float expandOffscreen,
+        float expandBox, float expandSkel, float expandFlags, float expandOffscreen,
         float s, int curSub, float a, ImFont* font, float labelFs)
     {
         if (a < 0.5f) return;
@@ -1487,9 +1490,9 @@ namespace GUI {
         static const char* s_ids[2] = { "##offs_dist", "##offs_size" };
 
         for (int k = 0; k < 2; ++k) {
-            const int idx = 25 + k;
+            const int idx = 33 + k;
 
-            const float rowA = Widgets::RowAlpha(idx, expandBox, expandFlags, expandOffscreen);
+            const float rowA = Widgets::RowAlpha(idx, expandBox, expandSkel, expandFlags, expandOffscreen);
             if (rowA < 0.01f) continue;
 
             float* valPtr = nullptr;
@@ -1517,7 +1520,7 @@ namespace GUI {
             const float alpha = a * rowA;
 
             if (font) {
-                const float labelCy = Widgets::RowCenterY(drawMin, idx, expandBox, expandFlags,
+                const float labelCy = Widgets::RowCenterY(drawMin, idx, expandBox, expandSkel, expandFlags,
                     expandOffscreen, s);
                 const ImVec2 tsz = font->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, buf);
                 const float tx = drawMax.x - 14.0f * s - tsz.x;
@@ -1528,7 +1531,7 @@ namespace GUI {
             }
 
             Widgets::Rect sr = Widgets::GetSliderRect(
-                drawMin, drawMax, idx, expandBox, expandFlags, expandOffscreen, s);
+                drawMin, drawMax, idx, expandBox, expandSkel, expandFlags, expandOffscreen, s);
 
             if (sr.max.x - sr.min.x < 16.0f) continue;
 
@@ -2104,7 +2107,7 @@ namespace GUI {
 
             const int curSub = g_activeSub[1];
 
-            bool* vals[Widgets::kEspItemCount];
+            bool* vals[Widgets::kEspItemCount] = {};
             vals[0] = (curSub == 0) ? &config.esp_enemy_enable : &config.esp_team_enable;
             vals[1] = (curSub == 0) ? &config.esp_enemy_box : &config.esp_team_box;
             vals[2] = (curSub == 0) ? &config.esp_enemy_box_style_corner : &config.esp_team_box_style_corner;
@@ -2112,26 +2115,25 @@ namespace GUI {
             vals[4] = (curSub == 0) ? &config.esp_enemy_box_style_fill : &config.esp_team_box_style_fill;
             vals[5] = (curSub == 0) ? &config.esp_enemy_box_outline : &config.esp_team_box_outline;
             vals[6] = (curSub == 0) ? &config.esp_enemy_skeleton : &config.esp_team_skeleton;
-            vals[7] = (curSub == 0) ? &config.esp_enemy_name : &config.esp_team_name;
-            vals[8] = (curSub == 0) ? &config.esp_enemy_healthbar : &config.esp_team_healthbar;
-            vals[9] = (curSub == 0) ? &config.esp_enemy_distance : &config.esp_team_distance;
-            vals[10] = (curSub == 0) ? &config.esp_enemy_headcircle : &config.esp_team_headcircle;
-            vals[11] = (curSub == 0) ? &config.esp_enemy_snapline : &config.esp_team_snapline;
-            vals[12] = (curSub == 0) ? &config.esp_enemy_viewdirection : &config.esp_team_viewdirection;
-            vals[13] = (curSub == 0) ? &config.esp_enemy_weapon : &config.esp_team_weapon;
-            vals[14] = (curSub == 0) ? &config.esp_enemy_flags : &config.esp_team_flags;
-            vals[15] = (curSub == 0) ? &config.esp_enemy_flags_flashed : &config.esp_team_flags_flashed;
-            vals[16] = (curSub == 0) ? &config.esp_enemy_flags_scoped : &config.esp_team_flags_scoped;
-            vals[17] = (curSub == 0) ? &config.esp_enemy_flags_defusing : &config.esp_team_flags_defusing;
-            vals[18] = (curSub == 0) ? &config.esp_enemy_flags_planting : &config.esp_team_flags_planting;
-            vals[19] = (curSub == 0) ? &config.esp_enemy_flags_bomb : &config.esp_team_flags_bomb;
-            vals[20] = (curSub == 0) ? &config.esp_enemy_flags_armor : &config.esp_team_flags_armor;
-            vals[21] = (curSub == 0) ? &config.esp_enemy_flags_reloading : &config.esp_team_flags_reloading;
-            vals[22] = (curSub == 0) ? &config.esp_enemy_flags_money : &config.esp_team_flags_money;
-            vals[23] = (curSub == 0) ? &config.esp_enemy_flags_ammo : &config.esp_team_flags_ammo;
-            vals[24] = (curSub == 0) ? &config.esp_enemy_offscreen : &config.esp_team_offscreen;
-            vals[25] = nullptr;
-            vals[26] = nullptr;
+            vals[14] = (curSub == 0) ? &config.esp_enemy_skeleton_draw_joints : &config.esp_team_skeleton_draw_joints;
+            vals[15] = (curSub == 0) ? &config.esp_enemy_name : &config.esp_team_name;
+            vals[16] = (curSub == 0) ? &config.esp_enemy_healthbar : &config.esp_team_healthbar;
+            vals[17] = (curSub == 0) ? &config.esp_enemy_distance : &config.esp_team_distance;
+            vals[18] = (curSub == 0) ? &config.esp_enemy_headcircle : &config.esp_team_headcircle;
+            vals[19] = (curSub == 0) ? &config.esp_enemy_snapline : &config.esp_team_snapline;
+            vals[20] = (curSub == 0) ? &config.esp_enemy_viewdirection : &config.esp_team_viewdirection;
+            vals[21] = (curSub == 0) ? &config.esp_enemy_weapon : &config.esp_team_weapon;
+            vals[22] = (curSub == 0) ? &config.esp_enemy_flags : &config.esp_team_flags;
+            vals[23] = (curSub == 0) ? &config.esp_enemy_flags_flashed : &config.esp_team_flags_flashed;
+            vals[24] = (curSub == 0) ? &config.esp_enemy_flags_scoped : &config.esp_team_flags_scoped;
+            vals[25] = (curSub == 0) ? &config.esp_enemy_flags_defusing : &config.esp_team_flags_defusing;
+            vals[26] = (curSub == 0) ? &config.esp_enemy_flags_planting : &config.esp_team_flags_planting;
+            vals[27] = (curSub == 0) ? &config.esp_enemy_flags_bomb : &config.esp_team_flags_bomb;
+            vals[28] = (curSub == 0) ? &config.esp_enemy_flags_armor : &config.esp_team_flags_armor;
+            vals[29] = (curSub == 0) ? &config.esp_enemy_flags_reloading : &config.esp_team_flags_reloading;
+            vals[30] = (curSub == 0) ? &config.esp_enemy_flags_money : &config.esp_team_flags_money;
+            vals[31] = (curSub == 0) ? &config.esp_enemy_flags_ammo : &config.esp_team_flags_ammo;
+            vals[32] = (curSub == 0) ? &config.esp_enemy_offscreen : &config.esp_team_offscreen;
 
             const ImVec2 mouse = io.MousePos;
             const float kApproach = 1.0f - expf(-18.0f * dt);
@@ -2160,15 +2162,14 @@ namespace GUI {
             ImGui::BeginChild("##esp_scroll", ImVec2(cardW, cardH), false,
                 ImGuiWindowFlags_NoSavedSettings);
 
-            const float contentHeight = Widgets::ContentHeight(
-                g_espExpandT[curSub],
-                g_flagsExpandT[curSub],
-                g_offscreenExpandT[curSub]) * s;
-            ImGui::Dummy(ImVec2(cardW, contentHeight));
-
             const float expandBox = g_espExpandT[curSub];
+            const float expandSkel = g_skelExpandT[curSub];
             const float expandFlags = g_flagsExpandT[curSub];
             const float expandOffscreen = g_offscreenExpandT[curSub];
+
+            const float contentHeight = Widgets::ContentHeight(
+                expandBox, expandSkel, expandFlags, expandOffscreen) * s;
+            ImGui::Dummy(ImVec2(cardW, contentHeight));
 
             const float scrollY = ImGui::GetScrollY();
             const ImVec2 drawMin(c0min.x, c0min.y - scrollY);
@@ -2176,8 +2177,8 @@ namespace GUI {
 
             ImDrawList* cdl = ImGui::GetWindowDrawList();
 
-            PlaceOffscreenSliders(cdl, drawMin, drawMax, expandBox, expandFlags,
-                expandOffscreen, s, curSub, a, font, labelFs);
+            PlaceOffscreenSliders(cdl, drawMin, drawMax, expandBox, expandSkel,
+                expandFlags, expandOffscreen, s, curSub, a, font, labelFs);
 
             cdl->PushClipRect(c0min, c0max, true);
 
@@ -2185,13 +2186,37 @@ namespace GUI {
                 && mouse.x >= c0min.x && mouse.x <= c0max.x
                 && mouse.y >= c0min.y && mouse.y <= c0max.y;
 
+            auto GetRowValue = [&](int i) -> bool {
+                if (Widgets::IsSkeletonJoint(i)) {
+                    const int j = i - 7;
+                    const uint32_t mask = (curSub == 0)
+                        ? config.esp_enemy_skeleton_joints
+                        : config.esp_team_skeleton_joints;
+                    return ((mask >> j) & 1u) != 0u;
+                }
+                return vals[i] ? *(vals[i]) : false;
+                };
+
+            auto ToggleRow = [&](int i) {
+                if (Widgets::IsSkeletonJoint(i)) {
+                    const int j = i - 7;
+                    uint32_t& mask = (curSub == 0)
+                        ? config.esp_enemy_skeleton_joints
+                        : config.esp_team_skeleton_joints;
+                    mask ^= (1u << j);
+                }
+                else if (vals[i]) {
+                    *(vals[i]) = !(*(vals[i]));
+                }
+                };
+
             for (int i = 0; i < Widgets::kEspItemCount; ++i) {
                 if (Widgets::IsSliderRow(i)) continue;
-                const float rowA = Widgets::RowAlpha(i, expandBox, expandFlags, expandOffscreen);
+                const float rowA = Widgets::RowAlpha(i, expandBox, expandSkel, expandFlags, expandOffscreen);
                 const bool interactive = mouseInCard && (rowA > 0.5f);
 
                 Widgets::Rect cb = Widgets::GetCheckboxRect(
-                    drawMin, drawMax, i, expandBox, expandFlags, expandOffscreen, s);
+                    drawMin, drawMax, i, expandBox, expandSkel, expandFlags, expandOffscreen, s);
 
                 const bool hov = interactive
                     && mouse.x >= cb.min.x && mouse.x <= cb.max.x
@@ -2199,20 +2224,22 @@ namespace GUI {
 
                 if (hov && ImGui::IsMouseClicked(0)) {
                     Framework::PlayClickSound();
-                    *(vals[i]) = !(*(vals[i]));
+                    ToggleRow(i);
                 }
+
+                const bool on = GetRowValue(i);
 
                 g_espHover[curSub][i] +=
                     ((hov ? 1.0f : 0.0f) - g_espHover[curSub][i]) * kApproach;
                 g_espSel[curSub][i] +=
-                    (((*(vals[i])) ? 1.0f : 0.0f) - g_espSel[curSub][i]) * kApproach;
+                    ((on ? 1.0f : 0.0f) - g_espSel[curSub][i]) * kApproach;
             }
 
             static char s_popupId[Widgets::kEspItemCount][32] = {};
 
             for (int i = 0; i < Widgets::kEspItemCount; ++i) {
                 if (Widgets::IsSliderRow(i)) continue;
-                const float rowA = Widgets::RowAlpha(i, expandBox, expandFlags, expandOffscreen);
+                const float rowA = Widgets::RowAlpha(i, expandBox, expandSkel, expandFlags, expandOffscreen);
                 const bool interactive = mouseInCard && (rowA > 0.5f);
 
                 bool colorHov = false;
@@ -2221,7 +2248,7 @@ namespace GUI {
 
                 if (colorPtr) {
                     Widgets::Rect cr = Widgets::GetColorRect(
-                        drawMin, drawMax, i, expandBox, expandFlags, expandOffscreen, s);
+                        drawMin, drawMax, i, expandBox, expandSkel, expandFlags, expandOffscreen, s);
 
                     colorHov = interactive
                         && mouse.x >= cr.min.x && mouse.x <= cr.max.x
@@ -2257,7 +2284,7 @@ namespace GUI {
             }
 
             Widgets::Rect ex = Widgets::GetExpanderRect(drawMin, drawMax, s,
-                expandBox, expandFlags, expandOffscreen, font, labelFs);
+                expandBox, expandSkel, expandFlags, expandOffscreen, font, labelFs);
             const bool exHov = mouseInCard
                 && mouse.x >= ex.min.x && mouse.x <= ex.max.x
                 && mouse.y >= ex.min.y && mouse.y <= ex.max.y;
@@ -2274,8 +2301,26 @@ namespace GUI {
             g_espExpandT[curSub] +=
                 (targetBox - g_espExpandT[curSub]) * kApproach;
 
+            Widgets::Rect sex = Widgets::GetSkelExpanderRect(drawMin, drawMax, s,
+                expandBox, expandSkel, expandFlags, expandOffscreen, font, labelFs);
+            const bool sexHov = mouseInCard
+                && mouse.x >= sex.min.x && mouse.x <= sex.max.x
+                && mouse.y >= sex.min.y && mouse.y <= sex.max.y;
+
+            if (sexHov && ImGui::IsMouseClicked(0)) {
+                Framework::PlayClickSound();
+                g_skelExpanded[curSub] = !g_skelExpanded[curSub];
+            }
+
+            g_skelExpanderHover[curSub] +=
+                ((sexHov ? 1.0f : 0.0f) - g_skelExpanderHover[curSub]) * kApproach;
+
+            const float targetSkel = g_skelExpanded[curSub] ? 1.0f : 0.0f;
+            g_skelExpandT[curSub] +=
+                (targetSkel - g_skelExpandT[curSub]) * kApproach;
+
             Widgets::Rect fex = Widgets::GetFlagsExpanderRect(drawMin, drawMax, s,
-                expandBox, expandFlags, expandOffscreen, font, labelFs);
+                expandBox, expandSkel, expandFlags, expandOffscreen, font, labelFs);
             const bool fexHov = mouseInCard
                 && mouse.x >= fex.min.x && mouse.x <= fex.max.x
                 && mouse.y >= fex.min.y && mouse.y <= fex.max.y;
@@ -2293,7 +2338,7 @@ namespace GUI {
                 (targetFlags - g_flagsExpandT[curSub]) * kApproach;
 
             Widgets::Rect oex = Widgets::GetOffscreenExpanderRect(drawMin, drawMax, s,
-                expandBox, expandFlags, expandOffscreen, font, labelFs);
+                expandBox, expandSkel, expandFlags, expandOffscreen, font, labelFs);
             const bool oexHov = mouseInCard
                 && mouse.x >= oex.min.x && mouse.x <= oex.max.x
                 && mouse.y >= oex.min.y && mouse.y <= oex.max.y;
@@ -2323,6 +2368,8 @@ namespace GUI {
                 colorPtrs,
                 g_espExpandT[curSub],
                 g_espExpanderHover[curSub],
+                g_skelExpandT[curSub],
+                g_skelExpanderHover[curSub],
                 g_flagsExpandT[curSub],
                 g_flagsExpanderHover[curSub],
                 g_offscreenExpandT[curSub],

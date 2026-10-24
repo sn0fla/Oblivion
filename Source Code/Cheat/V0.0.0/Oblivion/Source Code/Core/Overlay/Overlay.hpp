@@ -24,7 +24,7 @@ class Overlay
 public:
     struct Config
     {
-        std::wstring windowTitle = L"Overlay";
+        std::wstring windowTitle;
         std::wstring targetTitle;
         bool hideWhenTargetInactive = true;
         bool vsync = true;
@@ -89,12 +89,12 @@ private:
     void ApplyGeometry(const RECT& rc, bool visible);
     void ResizeSwapchain(UINT w, UINT h);
     void PollHotkeys();
-    void PumpInput();
 
     static LRESULT CALLBACK WndProcStatic(HWND h, UINT m, WPARAM w, LPARAM l);
 
 private:
     Config cfg_{};
+    std::wstring className_;
 
     HWND      hwnd_ = nullptr;
     HWND      target_ = nullptr;

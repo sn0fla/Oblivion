@@ -2,6 +2,8 @@
 #include <mmsystem.h>
 #include <shellapi.h>
 #include <imgui.h>
+#include <atomic>
+#include <thread>
 
 #include "../Overlay/Overlay.hpp"
 #include "../Memory/Memory.hpp"
@@ -25,6 +27,8 @@
 #include "../Features/Visuals/Player/ESP/Offscreen/Offscreen.hpp"
 
 #pragma comment(lib, "winmm.lib")
+#pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "ole32.lib")
 
 #pragma warning(push)
 #pragma warning(disable: 28251)
@@ -36,15 +40,10 @@ static bool HasUiActiveFlag()
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (!argv) return false;
-
     bool found = false;
     for (int i = 1; i < argc; ++i)
     {
-        if (wcscmp(argv[i], L"--ui-active") == 0)
-        {
-            found = true;
-            break;
-        }
+        if (wcscmp(argv[i], L"--ui-active") == 0) { found = true; break; }
     }
     LocalFree(argv);
     return found;
@@ -54,8 +53,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     Logging::Init();
-
-    config.Load(xorstr_("config.ini"));
 
     if (config.fullscreen_mode && !HasUiActiveFlag() && !Overlay::HasUIAccess()) {
         if (Overlay::TryElevateToUIAccess()) {
@@ -75,18 +72,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
     g_AllowMemoryWrite.store(!config.safe_mode, std::memory_order_relaxed);
 
-    if (!mem.Init(xorstr_(L"cs2.exe"))) {
-        Logging::Error("mem.Init failed (pid=%u)", mem.pid);
-        timeEndPeriod(1);
-        return 1;
-    }
-    Logging::Info("mem.Init OK (pid=%u, client=0x%llX, engine=0x%llX)",
-        mem.pid,
-        static_cast<unsigned long long>(mem.client),
-        static_cast<unsigned long long>(mem.engine));
-
     Overlay::Config ocfg;
-    ocfg.windowTitle = L"Overlay";
+    ocfg.windowTitle = Rng::WStr(10, true);
     ocfg.targetTitle = L"Counter-Strike 2";
     ocfg.hideWhenTargetInactive = false;
     ocfg.vsync = config.vsync;
@@ -101,13 +88,31 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     if (!overlay.Create(ocfg)) {
         Logging::Error("overlay.Create failed: %s", overlay.LastError().c_str());
         MessageBoxA(nullptr, overlay.LastError().c_str(), "Overlay Error", MB_OK | MB_ICONERROR);
-        mem.Cleanup(); timeEndPeriod(1);
+        timeEndPeriod(1);
         return 1;
     }
 
     overlay.SetInteractive(true);
     Animations::BootStart();
-    Logging::Info("Overlay created");
+    Logging::Info("Overlay created (boot animation started)");
+
+    std::atomic<bool> memReady{ false };
+    std::atomic<bool> memFailed{ false };
+    std::thread memThread([&] {
+        if (g_StopMemInit.load(std::memory_order_relaxed)) return;
+        if (mem.Init(xorstr_(L"cs2.exe"))) {
+            memReady.store(true, std::memory_order_release);
+            Logging::Info("mem.Init OK (pid=%u, client=0x%llX, engine=0x%llX)",
+                mem.pid,
+                static_cast<unsigned long long>(mem.client),
+                static_cast<unsigned long long>(mem.engine));
+        }
+        else {
+            if (g_StopMemInit.load(std::memory_order_relaxed)) return;
+            memFailed.store(true, std::memory_order_release);
+            Logging::Error("mem.Init failed (pid=%u)", mem.pid);
+        }
+        });
 
     overlay.Run([&](Overlay& ov) {
         ov.SetVsync(config.vsync);
@@ -168,6 +173,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
         if (g_unload_requested) ov.RequestExit();
         });
+
+    g_StopMemInit.store(true, std::memory_order_relaxed);
+    if (memThread.joinable()) memThread.join();
 
     overlay.Shutdown();
     Logging::Info("Shutdown complete");

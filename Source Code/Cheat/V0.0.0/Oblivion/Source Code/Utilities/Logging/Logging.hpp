@@ -5,7 +5,7 @@
 
 namespace Logging {
 
-	bool Init(const std::string& dir = "C:\\Oblivion\\Logs");
+	bool Init();
 	void Shutdown();
 
 	void Info(const char* fmt, ...);

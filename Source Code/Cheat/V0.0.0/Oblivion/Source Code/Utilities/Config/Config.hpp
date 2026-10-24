@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <cstdint>
 
 struct ConfigBrowser {
     std::string dir = "C:\\Oblivion\\Configurations";
@@ -16,7 +17,7 @@ struct ConfigBrowser {
 extern ConfigBrowser configBrowser;
 
 struct Config {
-    bool show_menu = true;
+    bool show_menu = false;
 
     bool  aim_enable = false;
     int   aim_mode = 0;
@@ -36,6 +37,8 @@ struct Config {
     float esp_enemy_box_outline_color[4] = { 0.0f, 0.0f, 0.0f, 0.85f };
     bool esp_enemy_skeleton = false;
     float esp_enemy_skeleton_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    uint32_t esp_enemy_skeleton_joints = 0x7F;
+    bool esp_enemy_skeleton_draw_joints = false;
     bool esp_enemy_name = false;
     float esp_enemy_name_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
     bool esp_enemy_healthbar = false;
@@ -53,25 +56,25 @@ struct Config {
 
     bool  esp_enemy_flags = false;
     float esp_enemy_flags_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    bool  esp_enemy_flags_flashed = true;
+    bool  esp_enemy_flags_flashed = false;
     float esp_enemy_flags_flashed_color[4] = { 1.0f, 1.0f, 0.4f, 1.0f };
-    bool  esp_enemy_flags_scoped = true;
+    bool  esp_enemy_flags_scoped = false;
     float esp_enemy_flags_scoped_color[4] = { 0.4f, 0.8f, 1.0f, 1.0f };
-    bool  esp_enemy_flags_defusing = true;
+    bool  esp_enemy_flags_defusing = false;
     float esp_enemy_flags_defusing_color[4] = { 1.0f, 0.6f, 0.2f, 1.0f };
-    bool  esp_enemy_flags_planting = true;
+    bool  esp_enemy_flags_planting = false;
     float esp_enemy_flags_planting_color[4] = { 1.0f, 0.3f, 0.3f, 1.0f };
-    bool  esp_enemy_flags_bomb = true;
+    bool  esp_enemy_flags_bomb = false;
     float esp_enemy_flags_bomb_color[4] = { 0.8f, 0.4f, 1.0f, 1.0f };
-    bool  esp_enemy_flags_armor = true;
+    bool  esp_enemy_flags_armor = false;
     float esp_enemy_flags_armor_color[4] = { 0.4f, 0.6f, 1.0f, 1.0f };
-    bool  esp_enemy_flags_reloading = true;
+    bool  esp_enemy_flags_reloading = false;
     float esp_enemy_flags_reloading_color[4] = { 1.0f, 0.85f, 0.4f, 1.0f };
-    bool  esp_enemy_flags_money = true;
+    bool  esp_enemy_flags_money = false;
     float esp_enemy_flags_money_color[4] = { 0.4f, 1.0f, 0.4f, 1.0f };
-    bool  esp_enemy_flags_ping = true;
+    bool  esp_enemy_flags_ping = false;
     float esp_enemy_flags_ping_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    bool  esp_enemy_flags_ammo = true;
+    bool  esp_enemy_flags_ammo = false;
     float esp_enemy_flags_ammo_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
     bool  esp_enemy_offscreen = false;
@@ -90,6 +93,8 @@ struct Config {
     float esp_team_box_outline_color[4] = { 0.0f, 0.0f, 0.0f, 0.85f };
     bool esp_team_skeleton = false;
     float esp_team_skeleton_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    uint32_t esp_team_skeleton_joints = 0x7F;
+    bool esp_team_skeleton_draw_joints = false;
     bool esp_team_name = false;
     float esp_team_name_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
     bool esp_team_healthbar = false;
@@ -107,25 +112,25 @@ struct Config {
 
     bool  esp_team_flags = false;
     float esp_team_flags_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    bool  esp_team_flags_flashed = true;
+    bool  esp_team_flags_flashed = false;
     float esp_team_flags_flashed_color[4] = { 1.0f, 1.0f, 0.4f, 1.0f };
-    bool  esp_team_flags_scoped = true;
+    bool  esp_team_flags_scoped = false;
     float esp_team_flags_scoped_color[4] = { 0.4f, 0.8f, 1.0f, 1.0f };
-    bool  esp_team_flags_defusing = true;
+    bool  esp_team_flags_defusing = false;
     float esp_team_flags_defusing_color[4] = { 1.0f, 0.6f, 0.2f, 1.0f };
-    bool  esp_team_flags_planting = true;
+    bool  esp_team_flags_planting = false;
     float esp_team_flags_planting_color[4] = { 1.0f, 0.3f, 0.3f, 1.0f };
-    bool  esp_team_flags_bomb = true;
+    bool  esp_team_flags_bomb = false;
     float esp_team_flags_bomb_color[4] = { 0.8f, 0.4f, 1.0f, 1.0f };
-    bool  esp_team_flags_armor = true;
+    bool  esp_team_flags_armor = false;
     float esp_team_flags_armor_color[4] = { 0.4f, 0.6f, 1.0f, 1.0f };
-    bool  esp_team_flags_reloading = true;
+    bool  esp_team_flags_reloading = false;
     float esp_team_flags_reloading_color[4] = { 1.0f, 0.85f, 0.4f, 1.0f };
-    bool  esp_team_flags_money = true;
+    bool  esp_team_flags_money = false;
     float esp_team_flags_money_color[4] = { 0.4f, 1.0f, 0.4f, 1.0f };
-    bool  esp_team_flags_ping = true;
+    bool  esp_team_flags_ping = false;
     float esp_team_flags_ping_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    bool  esp_team_flags_ammo = true;
+    bool  esp_team_flags_ammo = false;
     float esp_team_flags_ammo_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
     bool  esp_team_offscreen = false;

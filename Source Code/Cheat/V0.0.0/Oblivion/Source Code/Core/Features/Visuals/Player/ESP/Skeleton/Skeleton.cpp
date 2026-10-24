@@ -2,6 +2,7 @@
 #include "../../../../../../Utilities/Maths/Maths.hpp"
 #include "../../../../../../Utilities/Config/Config.hpp"
 #include "../../../../../../External/ImGUI/imgui.h"
+#include <algorithm>
 
 namespace Features::ESP {
 
@@ -30,6 +31,21 @@ namespace Features::ESP {
     };
     static constexpr int kConnectionCount = sizeof(kConnections) / sizeof(kConnections[0]);
 
+    static constexpr uint8_t kConnGroup[19] = {
+        0,
+        1, 1, 1, 1,
+        2, 2, 2, 2,
+        3, 3, 3, 3,
+        4, 4,
+        6,
+        5, 5,
+        6
+    };
+
+    static inline bool ShouldDrawConnection(int idx, uint32_t mask) {
+        return ((mask >> kConnGroup[idx]) & 1u) != 0u;
+    }
+
     static inline ImU32 Col(const float c[4]) {
         return IM_COL32(static_cast<int>(c[0] * 255.0f),
             static_cast<int>(c[1] * 255.0f),
@@ -43,8 +59,16 @@ namespace Features::ESP {
         ImDrawList* dl = ImGui::GetBackgroundDrawList();
         const float* colArr = isEnemy ? config.esp_enemy_skeleton_color
             : config.esp_team_skeleton_color;
+        const uint32_t jointsMask = isEnemy ? config.esp_enemy_skeleton_joints
+            : config.esp_team_skeleton_joints;
+        const bool drawJoints = isEnemy ? config.esp_enemy_skeleton_draw_joints
+            : config.esp_team_skeleton_draw_joints;
         const ImU32 col = Col(colArr);
         constexpr float kThickness = 1.5f;
+
+        if (jointsMask == 0 && !drawJoints) return;
+
+        const float jointRadius = (std::max)(2.0f, height * 0.0028f);
 
         for (const auto& ent : frame.entities) {
             const bool enemy = (ent.team != frame.localTeam);
@@ -60,13 +84,30 @@ namespace Features::ESP {
                     valid[i] = true;
             }
 
+            bool drawn[kBoneCount] = {};
+
             for (int c = 0; c < kConnectionCount; ++c) {
+                if (!ShouldDrawConnection(c, jointsMask)) continue;
                 const int a = static_cast<int>(kConnections[c].a);
                 const int b = static_cast<int>(kConnections[c].b);
                 if (a >= kBoneCount || b >= kBoneCount) continue;
+
                 if (valid[a] && valid[b]) {
                     dl->AddLine(ImVec2(scr[a].x, scr[a].y),
                         ImVec2(scr[b].x, scr[b].y), col, kThickness);
+                }
+
+                if (drawJoints) {
+                    if (valid[a] && !drawn[a]) {
+                        dl->AddCircleFilled(ImVec2(scr[a].x, scr[a].y),
+                            jointRadius, col, 10);
+                        drawn[a] = true;
+                    }
+                    if (valid[b] && !drawn[b]) {
+                        dl->AddCircleFilled(ImVec2(scr[b].x, scr[b].y),
+                            jointRadius, col, 10);
+                        drawn[b] = true;
+                    }
                 }
             }
         }
