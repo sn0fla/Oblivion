@@ -169,9 +169,9 @@ static bool InitSyscallEngine() {
     return true;
 }
 
-static void* BuildStub(uint32_t ssn) {
+static void* BuildStub(uint32_t ssn, int nArgs) {
     if (!g_stubPage || !g_syscallGadget) return nullptr;
-    if (g_stubOffset + 64 > 0x1000) return nullptr;
+    if (g_stubOffset + 128 > 0x1000) return nullptr;
 
     InitSpoofRets();
 
@@ -181,11 +181,16 @@ static void* BuildStub(uint32_t ssn) {
     if (g_spoofRets[2] && nFrames >= 2) nFrames++;
     if (nFrames < 1) nFrames = 1;
 
-    uint8_t* s = g_stubPage + g_stubOffset;
-    memset(s, 0xCC, 64);
+    int nStackArgs = (nArgs > 4) ? (nArgs - 4) : 0;
+    if (nStackArgs > 3) nStackArgs = 3;
 
-    SIZE_T codeSize = static_cast<SIZE_T>(nFrames) * 6 + 14;
-    SIZE_T dataStart = ((codeSize + 7) / 8) * 8;
+    uint8_t* s = g_stubPage + g_stubOffset;
+    memset(s, 0xCC, 128);
+
+    SIZE_T pushBytes = static_cast<SIZE_T>(nFrames) * 6;
+    SIZE_T copyCodeSize = static_cast<SIZE_T>(nStackArgs) * 16;
+    SIZE_T totalCodeSize = pushBytes + copyCodeSize + 3 + 5 + 6;
+    SIZE_T dataStart = ((totalCodeSize + 7) / 8) * 8;
 
     SIZE_T o = 0;
     for (int i = nFrames - 1; i >= 0; --i) {
@@ -194,6 +199,15 @@ static void* BuildStub(uint32_t ssn) {
         int32_t disp = static_cast<int32_t>((dataStart + 8 + static_cast<SIZE_T>(i) * 8) - (pos + 6));
         *reinterpret_cast<int32_t*>(s + o) = disp;
         o += 4;
+    }
+
+    for (int a = 0; a < nStackArgs; ++a) {
+        int32_t srcDisp = static_cast<int32_t>(0x28 + nFrames * 8 + a * 8);
+        int32_t dstDisp = static_cast<int32_t>(0x28 + a * 8);
+        s[o++] = 0x48; s[o++] = 0x8B; s[o++] = 0x84; s[o++] = 0x24;
+        *reinterpret_cast<int32_t*>(s + o) = srcDisp; o += 4;
+        s[o++] = 0x48; s[o++] = 0x89; s[o++] = 0x84; s[o++] = 0x24;
+        *reinterpret_cast<int32_t*>(s + o) = dstDisp; o += 4;
     }
 
     s[o++] = 0x4C; s[o++] = 0x8B; s[o++] = 0xD1;
@@ -213,22 +227,22 @@ static void* BuildStub(uint32_t ssn) {
         *reinterpret_cast<uintptr_t*>(s + dataStart + 8 + static_cast<SIZE_T>(i) * 8) = g_spoofRets[i];
 
     void* result = s;
-    g_stubOffset += 64;
+    g_stubOffset += 128;
     return result;
 }
 
-static void* BuildStubFor(const char* name) {
+static void* BuildStubFor(const char* name, int nArgs) {
     if (!InitSyscallEngine()) return nullptr;
     uintptr_t fn = FindExportByName(GetNtdllBase(), name);
     if (!fn) return nullptr;
     uint32_t ssn = ResolveSSN(fn);
     if (!ssn) return nullptr;
-    return BuildStub(ssn);
+    return BuildStub(ssn, nArgs);
 }
 
 pNtReadVirtualMemory_t GetNtReadVirtualMemory() {
     static pNtReadVirtualMemory_t fn = []() -> pNtReadVirtualMemory_t {
-        void* stub = BuildStubFor(xorstr_("NtReadVirtualMemory"));
+        void* stub = BuildStubFor(xorstr_("NtReadVirtualMemory"), 5);
         if (stub) return reinterpret_cast<pNtReadVirtualMemory_t>(stub);
         HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
         return reinterpret_cast<pNtReadVirtualMemory_t>(GetProcAddress(ntdll, xorstr_("NtReadVirtualMemory")));
@@ -238,7 +252,7 @@ pNtReadVirtualMemory_t GetNtReadVirtualMemory() {
 
 pNtWriteVirtualMemory_t GetNtWriteVirtualMemory() {
     static pNtWriteVirtualMemory_t fn = []() -> pNtWriteVirtualMemory_t {
-        void* stub = BuildStubFor(xorstr_("NtWriteVirtualMemory"));
+        void* stub = BuildStubFor(xorstr_("NtWriteVirtualMemory"), 5);
         if (stub) return reinterpret_cast<pNtWriteVirtualMemory_t>(stub);
         HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
         return reinterpret_cast<pNtWriteVirtualMemory_t>(GetProcAddress(ntdll, xorstr_("NtWriteVirtualMemory")));
@@ -248,7 +262,7 @@ pNtWriteVirtualMemory_t GetNtWriteVirtualMemory() {
 
 pNtOpenProcess_t GetNtOpenProcess() {
     static pNtOpenProcess_t fn = []() -> pNtOpenProcess_t {
-        void* stub = BuildStubFor(xorstr_("NtOpenProcess"));
+        void* stub = BuildStubFor(xorstr_("NtOpenProcess"), 4);
         if (stub) return reinterpret_cast<pNtOpenProcess_t>(stub);
         HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
         return reinterpret_cast<pNtOpenProcess_t>(GetProcAddress(ntdll, xorstr_("NtOpenProcess")));
@@ -258,7 +272,7 @@ pNtOpenProcess_t GetNtOpenProcess() {
 
 static pNtDuplicateObject_t GetNtDuplicateObject() {
     static pNtDuplicateObject_t fn = []() -> pNtDuplicateObject_t {
-        void* stub = BuildStubFor(xorstr_("NtDuplicateObject"));
+        void* stub = BuildStubFor(xorstr_("NtDuplicateObject"), 7);
         if (stub) return reinterpret_cast<pNtDuplicateObject_t>(stub);
         HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
         return reinterpret_cast<pNtDuplicateObject_t>(GetProcAddress(ntdll, xorstr_("NtDuplicateObject")));
@@ -268,7 +282,7 @@ static pNtDuplicateObject_t GetNtDuplicateObject() {
 
 static pNtQuerySystemInformation_t GetNtQuerySystemInformation() {
     static pNtQuerySystemInformation_t fn = []() -> pNtQuerySystemInformation_t {
-        void* stub = BuildStubFor(xorstr_("NtQuerySystemInformation"));
+        void* stub = BuildStubFor(xorstr_("NtQuerySystemInformation"), 4);
         if (stub) return reinterpret_cast<pNtQuerySystemInformation_t>(stub);
         HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
         return reinterpret_cast<pNtQuerySystemInformation_t>(GetProcAddress(ntdll, xorstr_("NtQuerySystemInformation")));
@@ -280,7 +294,7 @@ typedef NTSTATUS(NTAPI* pNtQueryInformationProcess_t)(HANDLE, PROCESSINFOCLASS, 
 
 static pNtQueryInformationProcess_t GetNtQueryInformationProcess() {
     static pNtQueryInformationProcess_t fn = []() -> pNtQueryInformationProcess_t {
-        void* stub = BuildStubFor(xorstr_("NtQueryInformationProcess"));
+        void* stub = BuildStubFor(xorstr_("NtQueryInformationProcess"), 5);
         if (stub) return reinterpret_cast<pNtQueryInformationProcess_t>(stub);
         HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
         return reinterpret_cast<pNtQueryInformationProcess_t>(GetProcAddress(ntdll, xorstr_("NtQueryInformationProcess")));
