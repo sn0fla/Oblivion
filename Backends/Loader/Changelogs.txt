@@ -1,11 +1,8 @@
 Aimbot
-- Replaced memory writes with read-only `SendInput` using indirect syscalls
-- Reworked the smoothing system
-
-Visuals
-- Added customizable skeleton ESP
+- Added humanization for more natural aiming behavior.
+- Reworked the FOV system.
+- Further refined and improved the smoothing system.
 
 System
-- Fixed an issue where the cheat could automatically load, create or save configs without user permission
-- Implemented security improvements
-- Old logs are now automatically deleted at runtime to prevent log accumulation
+- Added Streamproof.
+- Improved synchronization.
