@@ -18,7 +18,11 @@
 
 #pragma comment(lib, "shell32.lib")
 
-extern bool g_unload_requested;
+#ifndef WDA_EXCLUDEFROMCAPTURE
+#define WDA_EXCLUDEFROMCAPTURE 0x00000011
+#endif
+
+extern std::atomic<bool> g_unload_requested;
 extern std::atomic<bool> g_AllowMemoryWrite;
 
 namespace GUI {
@@ -66,6 +70,7 @@ namespace GUI {
     static float  g_vsyncHover = 0.0f;
     static float  g_tearingHover = 0.0f;
     static float  g_fullscreenHover = 0.0f;
+    static float  g_streamproofHover = 0.0f;
     static float  g_unloadHover = 0.0f;
     static bool   g_requestSafeModeConfirm = false;
     static bool   g_requestUnloadConfirm = false;
@@ -86,6 +91,23 @@ namespace GUI {
     static float  g_aimModeOptSel[3] = { 0.0f, 0.0f, 0.0f };
     static float  g_aimHitboxHover[7] = {};
     static float  g_aimHitboxSel[7] = {};
+
+    static float  g_aimVisibleHover = 0.0f;
+    static float  g_aimVisibleSel = 0.0f;
+
+    static float  g_aimFovVisHover = 0.0f;
+    static float  g_aimFovVisSel = 0.0f;
+    static float  g_aimFovVisColorHover = 0.0f;
+
+    static float  g_humEnableHover = 0.0f;
+    static float  g_humEnableSel = 0.0f;
+
+    static constexpr int kHumFeatureCount = 5;
+    static bool  g_humExpanded[kHumFeatureCount] = {};
+    static float g_humExpandT[kHumFeatureCount] = {};
+    static float g_humExpHover[kHumFeatureCount] = {};
+    static float g_humCbHover[kHumFeatureCount] = {};
+    static float g_humCbSel[kHumFeatureCount] = {};
 
     static constexpr float kMenuAnimDur = 0.10f;
 
@@ -946,6 +968,111 @@ namespace GUI {
 
         {
             const float cy = rowY + rowH * 0.5f;
+
+            const char* lbl = "Show FOV";
+            if (textFont) {
+                const ImVec2 lsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, lbl);
+                const float ly = cy - lsz.y * 0.5f;
+                dl->AddText(textFont, labelFs, ImVec2(floorf(contentX + 0.5f), floorf(ly + 0.5f)),
+                    IM_COL32(200, 195, 235, (int)(alpha * 255.0f)), lbl);
+            }
+
+            const ImVec2 cbMin(max.x - pad - cbSize, cy - cbSize * 0.5f);
+            const ImVec2 cbMax(cbMin.x + cbSize, cbMin.y + cbSize);
+
+            const float colorW = 38.0f * s;
+            const float colorGap = 6.0f * s;
+            const ImVec2 colorMin(cbMin.x - colorGap - colorW, cy - cbSize * 0.5f);
+            const ImVec2 colorMax(colorMin.x + colorW, colorMin.y + cbSize);
+
+            const bool cbHov = mouse.x >= cbMin.x && mouse.x <= cbMax.x
+                && mouse.y >= cbMin.y && mouse.y <= cbMax.y;
+
+            if (cbHov && ImGui::IsMouseClicked(0)) {
+                Framework::PlayClickSound();
+                config.aim_fov_visualize = !config.aim_fov_visualize;
+            }
+
+            g_aimFovVisHover += ((cbHov ? 1.0f : 0.0f) - g_aimFovVisHover) * kApproach;
+            g_aimFovVisSel += (((config.aim_fov_visualize) ? 1.0f : 0.0f) - g_aimFovVisSel) * kApproach;
+
+            drawCheckbox(cbMin, config.aim_fov_visualize, g_aimFovVisHover, 1.0f);
+
+            const bool colorHov = mouse.x >= colorMin.x && mouse.x <= colorMax.x
+                && mouse.y >= colorMin.y && mouse.y <= colorMax.y;
+            g_aimFovVisColorHover += ((colorHov ? 1.0f : 0.0f) - g_aimFovVisColorHover) * kApproach;
+
+            const float* c = config.aim_fov_visualize_color;
+
+            const int bgA = (int)(alpha * 255.0f);
+            dl->AddRectFilled(colorMin, colorMax, IM_COL32(16, 16, 16, bgA), cbRadius);
+
+            const int cR = (int)(c[0] * 255.0f + 0.5f);
+            const int cG = (int)(c[1] * 255.0f + 0.5f);
+            const int cB = (int)(c[2] * 255.0f + 0.5f);
+            const int cA = (int)(c[3] * alpha * 255.0f);
+            dl->AddRectFilled(colorMin, colorMax, IM_COL32(cR, cG, cB, cA), cbRadius);
+
+            const float chv = g_aimFovVisColorHover;
+            const int bR = (int)(100 + (189 - 100) * chv);
+            const int bG = (int)(100 + (176 - 100) * chv);
+            const int bB = (int)(100 + (255 - 100) * chv);
+            const int bA = (int)(alpha * (0.40f + 0.60f * chv) * 255.0f);
+            dl->AddRect(colorMin, colorMax, IM_COL32(bR, bG, bB, bA), cbRadius, 0, 1.0f * s);
+
+            if (colorHov && ImGui::IsMouseClicked(0)) {
+                Framework::PlayClickSound();
+                ImGui::OpenPopup("##aim_fovvis_color_popup");
+            }
+
+            PushPickerStyle(s);
+            ImGui::PushItemWidth(150.0f * s);
+            if (ImGui::BeginPopup("##aim_fovvis_color_popup")) {
+                ImGui::ColorPicker4("##aim_fovvis_color", config.aim_fov_visualize_color,
+                    ImGuiColorEditFlags_AlphaBar
+                    | ImGuiColorEditFlags_AlphaPreviewHalf
+                    | ImGuiColorEditFlags_PickerHueBar
+                    | ImGuiColorEditFlags_NoSidePreview
+                    | ImGuiColorEditFlags_NoInputs);
+                ImGui::EndPopup();
+            }
+            ImGui::PopItemWidth();
+            PopPickerStyle();
+
+            rowY += rowH;
+        }
+
+        {
+            const float cy = rowY + rowH * 0.5f;
+            const ImVec2 cbMin(max.x - pad - cbSize, cy - cbSize * 0.5f);
+            const ImVec2 cbMax(cbMin.x + cbSize, cbMin.y + cbSize);
+
+            const bool hov = mouse.x >= cbMin.x && mouse.x <= cbMax.x
+                && mouse.y >= cbMin.y && mouse.y <= cbMax.y;
+
+            if (hov && ImGui::IsMouseClicked(0)) {
+                Framework::PlayClickSound();
+                config.aim_visible_check = !config.aim_visible_check;
+            }
+
+            g_aimVisibleHover += ((hov ? 1.0f : 0.0f) - g_aimVisibleHover) * kApproach;
+            g_aimVisibleSel += (((config.aim_visible_check) ? 1.0f : 0.0f) - g_aimVisibleSel) * kApproach;
+
+            drawCheckbox(cbMin, config.aim_visible_check, g_aimVisibleHover, 1.0f);
+
+            if (textFont) {
+                const char* lbl = "Visible Check";
+                const ImVec2 lsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, lbl);
+                const float ly = cy - lsz.y * 0.5f;
+                dl->AddText(textFont, labelFs, ImVec2(floorf(contentX + 0.5f), floorf(ly + 0.5f)),
+                    IM_COL32(200, 195, 235, (int)(alpha * 255.0f)), lbl);
+            }
+
+            rowY += rowH;
+        }
+
+        {
+            const float cy = rowY + rowH * 0.5f;
             const char* lbl = "Hitboxes";
             const ImVec2 lsz = textFont
                 ? textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, lbl)
@@ -1095,6 +1222,230 @@ namespace GUI {
         }
     }
 
+    static void DrawHumanizeCard(ImDrawList* dl, ImVec2 min, ImVec2 max,
+        float alpha, float s, ImFont* textFont, float labelFs, float dt)
+    {
+        const int a8 = (int)(alpha * 255.0f);
+        const int borderA = (int)(alpha * 70.0f);
+        dl->AddRectFilled(min, max, IM_COL32(26, 26, 34, a8), 6.0f);
+        dl->AddRect(min, max, IM_COL32(189, 176, 255, borderA), 6.0f, 0, 1.0f);
+
+        const float pad = 14.0f * s;
+        const float rowH = 24.0f * s;
+        const float optRowH = 22.0f * s;
+        const float cbSize = 16.0f * s;
+        const float cbRadius = 4.0f * s;
+        const float iconSz = 11.0f * s;
+        const float expGap = 6.0f * s;
+        const float indent = 16.0f * s;
+
+        const float contentX = min.x + pad;
+        const float contentW = (max.x - min.x) - pad * 2.0f;
+
+        const ImVec2 mouse = ImGui::GetIO().MousePos;
+        const float kApproach = 1.0f - expf(-18.0f * dt);
+
+        auto drawCheckbox = [&](ImVec2 cbMin, bool on, float hover, float aMul) {
+            const float a = alpha * aMul;
+            const float sv = on ? 1.0f : 0.0f;
+            const float st = (sv > hover) ? sv : hover;
+            const int rC = (int)(120 + (189 - 120) * st);
+            const int gC = (int)(110 + (176 - 110) * st);
+            const int bC = (int)(180 + (255 - 180) * st);
+            const int fillA = (int)(a * (0.35f + 0.65f * sv) * 255.0f);
+            const int ringA = (int)(a * 0.55f * hover * 255.0f);
+            const ImVec2 cbMax(cbMin.x + cbSize, cbMin.y + cbSize);
+            dl->AddRectFilled(cbMin, cbMax, IM_COL32(rC, gC, bC, fillA), cbRadius);
+            if (ringA > 2)
+                dl->AddRect(cbMin, cbMax, IM_COL32(rC, gC, bC, ringA), cbRadius, 0, 1.5f * s);
+            };
+
+        float rowY = min.y + pad;
+
+        if (textFont) {
+            dl->AddText(textFont, labelFs * 1.05f,
+                ImVec2(contentX, rowY - 2.0f * s),
+                IM_COL32(200, 195, 235, (int)(alpha * 255.0f)),
+                "Humanization");
+        }
+        rowY += labelFs * 1.05f + 6.0f * s;
+
+        const bool masterOn = config.aim_humanize_enable;
+        const float masterDim = masterOn ? 1.0f : 0.6f;
+
+        {
+            const float cy = rowY + rowH * 0.5f;
+            const ImVec2 cbMin(max.x - pad - cbSize, cy - cbSize * 0.5f);
+            const ImVec2 cbMax(cbMin.x + cbSize, cbMin.y + cbSize);
+
+            const bool hov = mouse.x >= cbMin.x && mouse.x <= cbMax.x
+                && mouse.y >= cbMin.y && mouse.y <= cbMax.y;
+
+            if (hov && ImGui::IsMouseClicked(0)) {
+                Framework::PlayClickSound();
+                config.aim_humanize_enable = !config.aim_humanize_enable;
+            }
+
+            g_humEnableHover += ((hov ? 1.0f : 0.0f) - g_humEnableHover) * kApproach;
+            g_humEnableSel += (((config.aim_humanize_enable) ? 1.0f : 0.0f) - g_humEnableSel) * kApproach;
+
+            drawCheckbox(cbMin, config.aim_humanize_enable, g_humEnableHover, 1.0f);
+
+            if (textFont) {
+                const ImVec2 lsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, "Enable");
+                const float ly = cy - lsz.y * 0.5f;
+                dl->AddText(textFont, labelFs, ImVec2(contentX, ly),
+                    IM_COL32(200, 195, 235, (int)(alpha * 255.0f)), "Enable");
+            }
+            rowY += rowH;
+        }
+
+        for (int fi = 0; fi < kHumFeatureCount; ++fi) {
+            const char* fname = "";
+            bool* fEnable = nullptr;
+            float* s1 = nullptr; float s1min = 0.0f, s1max = 100.0f; const char* s1label = "Value"; const char* s1fmt = "%.0f";
+            float* s2 = nullptr; float s2min = 0.0f, s2max = 100.0f; const char* s2label = "Value"; const char* s2fmt = "%.0f";
+            bool twoSliders = false;
+
+            switch (fi) {
+            case 0:
+                fname = "Randomize Smooth";
+                fEnable = &config.aim_humanize_rand_smooth;
+                s1 = &config.aim_humanize_smooth_min; s1min = 0.0f; s1max = 100.0f; s1label = "Min";
+                s2 = &config.aim_humanize_smooth_max; s2min = 0.0f; s2max = 100.0f; s2label = "Max";
+                twoSliders = true;
+                break;
+            case 1:
+                fname = "Microjitter";
+                fEnable = &config.aim_humanize_jitter;
+                s1 = &config.aim_humanize_jitter_amount; s1min = 0.0f; s1max = 20.0f; s1label = "Amount";
+                break;
+            case 2:
+                fname = "Overshoot";
+                fEnable = &config.aim_humanize_overshoot;
+                s1 = &config.aim_humanize_overshoot_min; s1min = 0.0f; s1max = 50.0f; s1label = "Min";
+                s2 = &config.aim_humanize_overshoot_max; s2min = 0.0f; s2max = 50.0f; s2label = "Max";
+                twoSliders = true;
+                break;
+            case 3:
+                fname = "Undershoot";
+                fEnable = &config.aim_humanize_undershoot;
+                s1 = &config.aim_humanize_undershoot_min; s1min = 0.0f; s1max = 50.0f; s1label = "Min";
+                s2 = &config.aim_humanize_undershoot_max; s2min = 0.0f; s2max = 50.0f; s2label = "Max";
+                twoSliders = true;
+                break;
+            case 4:
+                fname = "Aim Curve";
+                fEnable = &config.aim_humanize_curve;
+                s1 = &config.aim_humanize_curve_amount; s1min = 0.0f; s1max = 1.0f; s1label = "Amount"; s1fmt = "%.2f";
+                break;
+            }
+
+            const bool featOn = *fEnable;
+            const float rowAlpha = alpha * masterDim;
+
+            {
+                const float cy = rowY + rowH * 0.5f;
+                const ImVec2 cbMin(max.x - pad - cbSize, cy - cbSize * 0.5f);
+                const ImVec2 cbMax(cbMin.x + cbSize, cbMin.y + cbSize);
+
+                const bool hov = mouse.x >= cbMin.x && mouse.x <= cbMax.x
+                    && mouse.y >= cbMin.y && mouse.y <= cbMax.y;
+
+                if (hov && ImGui::IsMouseClicked(0)) {
+                    Framework::PlayClickSound();
+                    *fEnable = !(*fEnable);
+                }
+
+                g_humCbHover[fi] += ((hov ? 1.0f : 0.0f) - g_humCbHover[fi]) * kApproach;
+                g_humCbSel[fi] += (((*fEnable) ? 1.0f : 0.0f) - g_humCbSel[fi]) * kApproach;
+
+                drawCheckbox(cbMin, *fEnable, g_humCbHover[fi], masterDim);
+
+                float nameW = 0.0f;
+                if (textFont) {
+                    const ImVec2 lsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, fname);
+                    nameW = lsz.x;
+                    const float ly = cy - lsz.y * 0.5f;
+                    dl->AddText(textFont, labelFs, ImVec2(contentX, ly),
+                        IM_COL32(200, 195, 235, (int)(rowAlpha * 255.0f)), fname);
+                }
+
+                const ImVec2 expC(contentX + nameW + expGap + iconSz * 0.5f, cy);
+                const float eh = iconSz * 0.75f;
+                const ImVec2 expMin(expC.x - eh, expC.y - eh);
+                const ImVec2 expMax(expC.x + eh, expC.y + eh);
+
+                const bool expHov = mouse.x >= expMin.x && mouse.x <= expMax.x
+                    && mouse.y >= expMin.y && mouse.y <= expMax.y;
+
+                if (expHov && ImGui::IsMouseClicked(0)) {
+                    Framework::PlayClickSound();
+                    g_humExpanded[fi] = !g_humExpanded[fi];
+                }
+
+                g_humExpHover[fi] += ((expHov ? 1.0f : 0.0f) - g_humExpHover[fi]) * kApproach;
+                g_humExpandT[fi] += (((g_humExpanded[fi]) ? 1.0f : 0.0f) - g_humExpandT[fi]) * kApproach;
+
+                const int eR = (int)(150 + (189 - 150) * g_humExpHover[fi]);
+                const int eG = (int)(140 + (176 - 140) * g_humExpHover[fi]);
+                const int eB = (int)(205 + (255 - 205) * g_humExpHover[fi]);
+                const ImU32 eCol = IM_COL32(eR, eG, eB, (int)(rowAlpha * 255.0f));
+                DrawChevronLocal(dl, expC, iconSz, 1.5707963f * g_humExpandT[fi], eCol, 1.6f * s);
+
+                rowY += rowH;
+            }
+
+            if (g_humExpandT[fi] > 0.001f) {
+                const float sliderAlpha = rowAlpha * (featOn ? 1.0f : 0.5f);
+
+                auto drawSliderRow = [&](const char* label, float* val, float vmin, float vmax, int uid, const char* fmt) {
+                    const float cy = rowY + optRowH * 0.5f;
+                    const float indentX = contentX + indent;
+
+                    float labelW = 30.0f * s;
+                    if (textFont) {
+                        const ImVec2 lsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, label);
+                        labelW = lsz.x;
+                        dl->AddText(textFont, labelFs,
+                            ImVec2(indentX, cy - lsz.y * 0.5f),
+                            IM_COL32(190, 185, 225, (int)(sliderAlpha * 255.0f)), label);
+                    }
+
+                    char buf[16];
+                    snprintf(buf, sizeof(buf), fmt, *val);
+                    const float valueW = 36.0f * s;
+                    if (textFont) {
+                        const ImVec2 vsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, buf);
+                        dl->AddText(textFont, labelFs,
+                            ImVec2(max.x - pad - vsz.x, cy - vsz.y * 0.5f),
+                            IM_COL32(200, 190, 240, (int)(sliderAlpha * 255.0f)), buf);
+                    }
+
+                    const float sliderX = indentX + labelW + 8.0f * s;
+                    const float sliderW = (max.x - pad - valueW - 4.0f * s) - sliderX;
+                    const float sliderY = cy - 2.0f * s;
+
+                    if (sliderW > 16.0f * s) {
+                        char sid[32];
+                        snprintf(sid, sizeof(sid), "##hum_sl_%d_%d", fi, uid);
+                        Widgets::Rect sr = {
+                            ImVec2(sliderX, sliderY),
+                            ImVec2(sliderX + sliderW, sliderY + 4.0f * s) };
+                        Widgets::DrawDashedSlider(dl, sr, val, vmin, vmax, sliderAlpha, s, sid);
+                    }
+
+                    rowY += optRowH * g_humExpandT[fi];
+                    };
+
+                drawSliderRow(s1label, s1, s1min, s1max, 0, s1fmt);
+                if (twoSliders && s2) {
+                    drawSliderRow(s2label, s2, s2min, s2max, 1, s2fmt);
+                }
+            }
+        }
+    }
+
     static void DrawSystemCard(ImDrawList* dl, ImVec2 pos, float menuW, float menuH,
         float hdrH, float s, float a, float dt, ImFont* font, float labelFs)
     {
@@ -1132,6 +1483,7 @@ namespace GUI {
         const float vsyncRowY = safeRowY + rowH;
         const float tearRowY = vsyncRowY + rowH;
         const float fullscreenRowY = tearRowY + rowH;
+        const float streamproofRowY = fullscreenRowY + rowH;
 
         {
             const float cbY0 = safeRowY + (rowH - cbSize) * 0.5f;
@@ -1301,6 +1653,46 @@ namespace GUI {
             }
         }
 
+        {
+            const float cbY0 = streamproofRowY + (rowH - cbSize) * 0.5f;
+            const float cbY1 = cbY0 + cbSize;
+            const bool hov = interactive
+                && mouse.x >= cbX0 && mouse.x <= cbX1
+                && mouse.y >= cbY0 && mouse.y <= cbY1;
+
+            g_streamproofHover += ((hov ? 1.0f : 0.0f) - g_streamproofHover) * kApproach;
+
+            const bool enabled = config.streamproof;
+            const float selT = enabled ? 1.0f : 0.0f;
+            const float st = (selT > g_streamproofHover) ? selT : g_streamproofHover;
+            const int mR = (int)(120 + (189 - 120) * st);
+            const int mG = (int)(110 + (176 - 110) * st);
+            const int mB = (int)(180 + (255 - 180) * st);
+            const int mFillA = (int)(cardAlpha * (0.35f + 0.65f * selT) * 255.0f);
+            const int mRingA = (int)(cardAlpha * 0.55f * g_streamproofHover * 255.0f);
+
+            dl->AddRectFilled(ImVec2(cbX0, cbY0), ImVec2(cbX1, cbY1),
+                IM_COL32(mR, mG, mB, mFillA), 4.0f * s);
+            if (mRingA > 2)
+                dl->AddRect(ImVec2(cbX0, cbY0), ImVec2(cbX1, cbY1),
+                    IM_COL32(mR, mG, mB, mRingA), 4.0f * s, 0, 1.5f * s);
+
+            if (font) {
+                const ImVec2 lsz = font->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, "Streamproof");
+                const float ly = streamproofRowY + (rowH - lsz.y) * 0.5f;
+                const int lr = (int)(190 + (235 - 190) * st);
+                const int lg = (int)(185 + (228 - 185) * st);
+                const int lb = (int)(215 + (255 - 215) * st);
+                dl->AddText(font, labelFs, ImVec2(floorf(labelX + 0.5f), floorf(ly + 0.5f)),
+                    IM_COL32(lr, lg, lb, (int)(cardAlpha * 255.0f)), "Streamproof");
+            }
+
+            if (hov && ImGui::IsMouseClicked(0)) {
+                Framework::PlayClickSound();
+                config.streamproof = !config.streamproof;
+            }
+        }
+
         const float btnH = 34.0f * s;
         const float btnY = cmax.y - cp - btnH;
         const float btnX0 = cmin.x + cp;
@@ -1465,7 +1857,7 @@ namespace GUI {
             ImGui::Spacing();
 
             if (ImGui::Button("Unload", ImVec2(96.0f * s, 0))) {
-                g_unload_requested = true;
+                g_unload_requested.store(true, std::memory_order_release);
                 ImGui::CloseCurrentPopup();
             }
 
@@ -1954,6 +2346,24 @@ namespace GUI {
 
         g_AllowMemoryWrite.store(!config.safe_mode, std::memory_order_relaxed);
 
+        static bool s_streamproofInit = false;
+        static bool s_streamproofLast = false;
+        if (!s_streamproofInit || s_streamproofLast != config.streamproof) {
+            s_streamproofInit = true;
+            s_streamproofLast = config.streamproof;
+
+            HWND hwnd = static_cast<HWND>(ImGui::GetMainViewport()->PlatformHandle);
+            if (hwnd && IsWindow(hwnd)) {
+                if (config.streamproof) {
+                    if (!SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE))
+                        SetWindowDisplayAffinity(hwnd, WDA_MONITOR);
+                }
+                else {
+                    SetWindowDisplayAffinity(hwnd, WDA_NONE);
+                }
+            }
+        }
+
         const ImGuiIO& io = ImGui::GetIO();
 
         float dt = io.DeltaTime;
@@ -1977,7 +2387,7 @@ namespace GUI {
         if (std::isnan(a) || std::isinf(a)) a = 1.0f;
 
         constexpr float kBaseW = 720.0f;
-        constexpr float kBaseH = 460.0f;
+        constexpr float kBaseH = 520.0f;
         constexpr float kHeaderH = 46.0f;
         constexpr float kSmallScale = 0.10f;
 
@@ -2087,6 +2497,11 @@ namespace GUI {
             const ImVec2 cmax(contentX + cardW, contentY + cardH);
 
             DrawAimbotCard(dl, cmin, cmax, a * s, s, font, labelFs, dt);
+
+            const ImVec2 c2min(contentX + cardW + gap, contentY);
+            const ImVec2 c2max(c2min.x + cardW, contentY + cardH);
+
+            DrawHumanizeCard(dl, c2min, c2max, a * s, s, font, labelFs, dt);
         }
         else if (showEspCard) {
             const float pad = 16.0f * s;

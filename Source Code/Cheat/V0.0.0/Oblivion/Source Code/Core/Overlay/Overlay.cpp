@@ -1,5 +1,6 @@
 ﻿#include "Overlay.hpp"
 #include "../Memory/Memory.hpp"
+#include "../GUI/Framework/Framework.hpp"
 
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
@@ -15,12 +16,14 @@
 #include <tlhelp32.h>
 #include <shellapi.h>
 #include <securitybaseapi.h>
+#include <dwmapi.h>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "dcomp.lib")
 #pragma comment(lib, "avrt.lib")
 #pragma comment(lib, "winmm.lib")
+#pragma comment(lib, "dwmapi.lib")
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -157,14 +160,38 @@ UINT Overlay::GetMonitorRefreshRate() const
     else
         mon = MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
 
+    UINT nominal = 60;
     MONITORINFOEXW mi{};
     mi.cbSize = sizeof(mi);
-    if (!GetMonitorInfoW(mon, &mi)) return 60;
-    DEVMODEW dm{};
-    dm.dmSize = sizeof(dm);
-    if (!EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm)) return 60;
-    if (dm.dmDisplayFrequency <= 1) return 60;
-    return static_cast<UINT>(dm.dmDisplayFrequency);
+    if (GetMonitorInfoW(mon, &mi))
+    {
+        DEVMODEW dm{};
+        dm.dmSize = sizeof(dm);
+        if (EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) &&
+            dm.dmDisplayFrequency > 1)
+        {
+            nominal = static_cast<UINT>(dm.dmDisplayFrequency);
+        }
+    }
+
+    DWM_TIMING_INFO dti{};
+    dti.cbSize = sizeof(dti);
+    if (SUCCEEDED(DwmGetCompositionTimingInfo(nullptr, &dti)) && dti.qpcRefreshPeriod > 0)
+    {
+        LARGE_INTEGER freq;
+        if (QueryPerformanceFrequency(&freq) && freq.QuadPart > 0)
+        {
+            const double hz = static_cast<double>(freq.QuadPart) /
+                static_cast<double>(dti.qpcRefreshPeriod);
+            if (hz > static_cast<double>(nominal) * 0.95 &&
+                hz < static_cast<double>(nominal) * 1.05)
+            {
+                return static_cast<UINT>(hz + 0.5);
+            }
+        }
+    }
+
+    return nominal;
 }
 
 void Overlay::RefreshMonitorHz()
@@ -302,30 +329,23 @@ bool Overlay::CreateSwapChain()
     sd.Scaling = DXGI_SCALING_STRETCH;
     sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     sd.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
-
-    hwTearingOk_ = false;
+    sd.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
     if (tearingOk)
-    {
-        sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-        if (SUCCEEDED(factory->CreateSwapChainForComposition(device_.Get(), &sd, nullptr, &swapChain_)))
-            hwTearingOk_ = true;
-        else
-            swapChain_.Reset();
-    }
-    if (!swapChain_)
-    {
-        sd.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
-        if (FAILED(factory->CreateSwapChainForComposition(device_.Get(), &sd, nullptr, &swapChain_)))
-            return Fail("CreateSwapChainForComposition failed");
-    }
-    if (SUCCEEDED(swapChain_.As(&swapChain2_)))
-        swapChain2_->SetMaximumFrameLatency(1);
-    if (!hwTearingOk_)
-    {
-        if (!swapChain2_) return Fail("QueryInterface(IDXGISwapChain2) failed");
-        waitable_ = swapChain2_->GetFrameLatencyWaitableObject();
-        if (!waitable_) return Fail("GetFrameLatencyWaitableObject failed");
-    }
+        sd.Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+
+    hwTearingOk_ = tearingOk;
+
+    if (FAILED(factory->CreateSwapChainForComposition(device_.Get(), &sd, nullptr, &swapChain_)))
+        return Fail("CreateSwapChainForComposition failed");
+
+    if (FAILED(swapChain_.As(&swapChain2_)))
+        return Fail("QueryInterface(IDXGISwapChain2) failed");
+
+    swapChain2_->SetMaximumFrameLatency(1);
+    waitable_ = swapChain2_->GetFrameLatencyWaitableObject();
+    if (!waitable_)
+        return Fail("GetFrameLatencyWaitableObject failed");
+
     return true;
 }
 
@@ -402,6 +422,8 @@ bool Overlay::InitImGui()
     if (!cfg_.fontPath.empty())
         io.Fonts->AddFontFromFileTTF(cfg_.fontPath.c_str(), cfg_.fontSize);
 
+    Framework::GetIconFont();
+
     if (!ImGui_ImplWin32_Init(hwnd_)) return Fail("ImGui_ImplWin32_Init failed");
     if (!ImGui_ImplDX11_Init(device_.Get(), ctx_.Get())) return Fail("ImGui_ImplDX11_Init failed");
 
@@ -428,16 +450,15 @@ void Overlay::Warmup()
             ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
             if (swapChain_)
             {
+                UINT syncInterval = 1;
                 UINT pf = 0;
-                UINT sync = 1;
-                if (waitable_) sync = 0;
-                else if (!cfg_.vsync)
+                if (!cfg_.vsync)
                 {
-                    sync = 0;
+                    syncInterval = 0;
                     if (cfg_.allow_tearing && hwTearingOk_)
-                        pf = DXGI_PRESENT_ALLOW_TEARING | DXGI_PRESENT_DO_NOT_WAIT;
+                        pf = DXGI_PRESENT_ALLOW_TEARING;
                 }
-                swapChain_->Present(sync, pf);
+                swapChain_->Present(syncInterval, pf);
             }
         }
         if (waitable_) WaitForSingleObject(waitable_, 50);
@@ -601,16 +622,18 @@ void Overlay::ResizeSwapchain(UINT w, UINT h)
     if (!swapChain_ || !ctx_) return;
     ctx_->OMSetRenderTargets(0, nullptr, nullptr);
     rtv_.Reset();
-    const UINT flags = hwTearingOk_
-        ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING
-        : DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+    const UINT flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT |
+        (hwTearingOk_ ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0);
     HRESULT hr = swapChain_->ResizeBuffers(0, w, h, DXGI_FORMAT_UNKNOWN, flags);
     if (FAILED(hr)) { Fail("ResizeBuffers failed", hr); running_ = false; return; }
     width_ = w;
     height_ = h;
     if (!CreateSwapChainTarget()) running_ = false;
-    if (!hwTearingOk_ && swapChain2_)
+    if (swapChain2_)
+    {
+        swapChain2_->SetMaximumFrameLatency(1);
         waitable_ = swapChain2_->GetFrameLatencyWaitableObject();
+    }
 }
 
 void Overlay::ApplyGeometry(const RECT& rcIn, bool visible)
@@ -733,16 +756,14 @@ void Overlay::Run(const RenderFn& render)
         {
             UINT syncInterval = 1;
             UINT pf = 0;
-            if (waitable_) syncInterval = 0;
-            else if (!cfg_.vsync)
+            if (!cfg_.vsync)
             {
                 syncInterval = 0;
                 if (cfg_.allow_tearing && hwTearingOk_)
-                    pf = DXGI_PRESENT_ALLOW_TEARING | DXGI_PRESENT_DO_NOT_WAIT;
+                    pf = DXGI_PRESENT_ALLOW_TEARING;
             }
             const HRESULT hr = swapChain_->Present(syncInterval, pf);
-            if (hr == DXGI_ERROR_WAS_STILL_DRAWING) {}
-            else if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
+            if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
             {
                 Fail("GPU device lost", hr);
                 running_ = false;

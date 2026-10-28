@@ -3,6 +3,7 @@
 #include "../../../../../../Utilities/Config/Config.hpp"
 #include "../../../../../../External/ImGUI/imgui.h"
 #include <algorithm>
+#include <cmath>
 
 namespace Features::ESP {
 
@@ -68,7 +69,7 @@ namespace Features::ESP {
 
         if (jointsMask == 0 && !drawJoints) return;
 
-        const float jointRadius = (std::max)(2.0f, height * 0.0028f);
+        const float fallbackJointRadius = (std::max)(1.0f, 1.5f * (static_cast<float>(height) / 1080.0f));
 
         for (const auto& ent : frame.entities) {
             const bool enemy = (ent.team != frame.localTeam);
@@ -82,6 +83,14 @@ namespace Features::ESP {
             for (int i = 0; i < kBoneCount; ++i) {
                 if (Math::WorldToScreen(ent.bones[i], scr[i], viewMatrix, width, height))
                     valid[i] = true;
+            }
+
+            float jointRadius = fallbackJointRadius;
+            const int headIdx = static_cast<int>(BoneIndex::Head);
+            const int pelvisIdx = static_cast<int>(BoneIndex::Pelvis);
+            if (valid[headIdx] && valid[pelvisIdx]) {
+                const float approxH = std::fabs(scr[headIdx].y - scr[pelvisIdx].y);
+                jointRadius = (std::clamp)(approxH * 0.012f, 0.8f, 3.0f);
             }
 
             bool drawn[kBoneCount] = {};

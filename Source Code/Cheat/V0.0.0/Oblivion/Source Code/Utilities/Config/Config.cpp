@@ -70,6 +70,27 @@ void Config::SetDefaults() {
     aim_fov = 180.0f;
     aim_hitbox = 1;
     aim_smooth = 50.0f;
+    aim_visible_check = false;
+    aim_fov_visualize = false;
+    aim_fov_visualize_color[0] = 1.0f;
+    aim_fov_visualize_color[1] = 1.0f;
+    aim_fov_visualize_color[2] = 1.0f;
+    aim_fov_visualize_color[3] = 1.0f;
+
+    aim_humanize_enable = false;
+    aim_humanize_rand_smooth = false;
+    aim_humanize_smooth_min = 30.0f;
+    aim_humanize_smooth_max = 70.0f;
+    aim_humanize_jitter = false;
+    aim_humanize_jitter_amount = 1.5f;
+    aim_humanize_overshoot = false;
+    aim_humanize_overshoot_min = 5.0f;
+    aim_humanize_overshoot_max = 15.0f;
+    aim_humanize_undershoot = false;
+    aim_humanize_undershoot_min = 5.0f;
+    aim_humanize_undershoot_max = 15.0f;
+    aim_humanize_curve = false;
+    aim_humanize_curve_amount = 0.5f;
 
     esp_enemy_enable = false;
     esp_enemy_box = false;
@@ -189,6 +210,7 @@ void Config::SetDefaults() {
 
     safe_mode = true;
     safe_mode_no_warn = false;
+    streamproof = false;
 }
 
 void Config::Save(const std::string& path) {
@@ -205,6 +227,23 @@ void Config::Save(const std::string& path) {
     file << "fov = " << aim_fov << "\n";
     file << "hitbox = " << aim_hitbox << "\n";
     file << "smooth = " << aim_smooth << "\n";
+    file << "visible_check = " << (aim_visible_check ? "true" : "false") << "\n";
+    file << "fov_visualize = " << (aim_fov_visualize ? "true" : "false") << "\n";
+    WriteColor(file, "fov_visualize_color", aim_fov_visualize_color);
+    file << "humanize_enable = " << (aim_humanize_enable ? "true" : "false") << "\n";
+    file << "humanize_rand_smooth = " << (aim_humanize_rand_smooth ? "true" : "false") << "\n";
+    file << "humanize_smooth_min = " << aim_humanize_smooth_min << "\n";
+    file << "humanize_smooth_max = " << aim_humanize_smooth_max << "\n";
+    file << "humanize_jitter = " << (aim_humanize_jitter ? "true" : "false") << "\n";
+    file << "humanize_jitter_amount = " << aim_humanize_jitter_amount << "\n";
+    file << "humanize_overshoot = " << (aim_humanize_overshoot ? "true" : "false") << "\n";
+    file << "humanize_overshoot_min = " << aim_humanize_overshoot_min << "\n";
+    file << "humanize_overshoot_max = " << aim_humanize_overshoot_max << "\n";
+    file << "humanize_undershoot = " << (aim_humanize_undershoot ? "true" : "false") << "\n";
+    file << "humanize_undershoot_min = " << aim_humanize_undershoot_min << "\n";
+    file << "humanize_undershoot_max = " << aim_humanize_undershoot_max << "\n";
+    file << "humanize_curve = " << (aim_humanize_curve ? "true" : "false") << "\n";
+    file << "humanize_curve_amount = " << aim_humanize_curve_amount << "\n";
 
     file << "\n[ESP_Enemy]\n";
     file << "enable = " << (esp_enemy_enable ? "true" : "false") << "\n";
@@ -306,6 +345,7 @@ void Config::Save(const std::string& path) {
     file << "\n[Misc]\n";
     file << "safe_mode = " << (safe_mode ? "true" : "false") << "\n";
     file << "safe_mode_no_warn = " << (safe_mode_no_warn ? "true" : "false") << "\n";
+    file << "streamproof = " << (streamproof ? "true" : "false") << "\n";
 
     file.close();
 }
@@ -429,6 +469,63 @@ void Config::Load(const std::string& path) {
                 if (aim_smooth < 0.0f) aim_smooth = 0.0f;
                 if (aim_smooth > 100.0f) aim_smooth = 100.0f;
             }
+            else if (key == "visible_check") aim_visible_check = b;
+            else if (key == "fov_visualize") aim_fov_visualize = b;
+            else if (key == "fov_visualize_color") ParseColor(value, aim_fov_visualize_color);
+            else if (key == "humanize_enable") aim_humanize_enable = b;
+            else if (key == "humanize_rand_smooth") aim_humanize_rand_smooth = b;
+            else if (key == "humanize_smooth_min") {
+                try { aim_humanize_smooth_min = std::stof(value); }
+                catch (...) {}
+                if (aim_humanize_smooth_min < 0.0f) aim_humanize_smooth_min = 0.0f;
+                if (aim_humanize_smooth_min > 100.0f) aim_humanize_smooth_min = 100.0f;
+            }
+            else if (key == "humanize_smooth_max") {
+                try { aim_humanize_smooth_max = std::stof(value); }
+                catch (...) {}
+                if (aim_humanize_smooth_max < 0.0f) aim_humanize_smooth_max = 0.0f;
+                if (aim_humanize_smooth_max > 100.0f) aim_humanize_smooth_max = 100.0f;
+            }
+            else if (key == "humanize_jitter") aim_humanize_jitter = b;
+            else if (key == "humanize_jitter_amount") {
+                try { aim_humanize_jitter_amount = std::stof(value); }
+                catch (...) {}
+                if (aim_humanize_jitter_amount < 0.0f) aim_humanize_jitter_amount = 0.0f;
+                if (aim_humanize_jitter_amount > 20.0f) aim_humanize_jitter_amount = 20.0f;
+            }
+            else if (key == "humanize_overshoot") aim_humanize_overshoot = b;
+            else if (key == "humanize_overshoot_min") {
+                try { aim_humanize_overshoot_min = std::stof(value); }
+                catch (...) {}
+                if (aim_humanize_overshoot_min < 0.0f) aim_humanize_overshoot_min = 0.0f;
+                if (aim_humanize_overshoot_min > 50.0f) aim_humanize_overshoot_min = 50.0f;
+            }
+            else if (key == "humanize_overshoot_max") {
+                try { aim_humanize_overshoot_max = std::stof(value); }
+                catch (...) {}
+                if (aim_humanize_overshoot_max < 0.0f) aim_humanize_overshoot_max = 0.0f;
+                if (aim_humanize_overshoot_max > 50.0f) aim_humanize_overshoot_max = 50.0f;
+            }
+            else if (key == "humanize_undershoot") aim_humanize_undershoot = b;
+            else if (key == "humanize_undershoot_min") {
+                try { aim_humanize_undershoot_min = std::stof(value); }
+                catch (...) {}
+                if (aim_humanize_undershoot_min < 0.0f) aim_humanize_undershoot_min = 0.0f;
+                if (aim_humanize_undershoot_min > 50.0f) aim_humanize_undershoot_min = 50.0f;
+            }
+            else if (key == "humanize_undershoot_max") {
+                try { aim_humanize_undershoot_max = std::stof(value); }
+                catch (...) {}
+                if (aim_humanize_undershoot_max < 0.0f) aim_humanize_undershoot_max = 0.0f;
+                if (aim_humanize_undershoot_max > 50.0f) aim_humanize_undershoot_max = 50.0f;
+            }
+            else if (key == "humanize_curve") aim_humanize_curve = b;
+            else if (key == "humanize_curve_amount") {
+                try { aim_humanize_curve_amount = std::stof(value); }
+                catch (...) {}
+                if (aim_humanize_curve_amount < 0.0f) aim_humanize_curve_amount = 0.0f;
+                if (aim_humanize_curve_amount > 1.0f) aim_humanize_curve_amount = 1.0f;
+            }
         }
         else if (currentSection == "ESP_Enemy") {
             if (key == "enable") esp_enemy_enable = b;
@@ -542,6 +639,7 @@ void Config::Load(const std::string& path) {
         else if (currentSection == "Misc") {
             if (key == "safe_mode") safe_mode = b;
             else if (key == "safe_mode_no_warn") safe_mode_no_warn = b;
+            else if (key == "streamproof") streamproof = b;
         }
     }
 

@@ -636,6 +636,16 @@ namespace Widgets {
 
         const bool active = ImGui::IsItemActive();
         const bool hovered = ImGui::IsItemHovered();
+        const ImGuiID myId = ImGui::GetItemID();
+
+        static ImGuiID s_lastSliderId = 0;
+        if (ImGui::IsItemClicked()) {
+            s_lastSliderId = myId;
+        }
+
+        if (hovered || active) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+        }
 
         if (active) {
             const float mx = ImGui::GetIO().MousePos.x;
@@ -643,6 +653,32 @@ namespace Widgets {
             if (t < 0.0f) t = 0.0f;
             if (t > 1.0f) t = 1.0f;
             *val = vmin + (vmax - vmin) * t;
+        }
+
+        const bool isFocused = (s_lastSliderId == myId) || active;
+        if (isFocused && !ImGui::GetIO().WantTextInput) {
+            const float range = vmax - vmin;
+            const bool ctrl = ImGui::GetIO().KeyCtrl;
+            const bool shift = ImGui::GetIO().KeyShift;
+
+            float step = range * 0.01f;
+            if (ctrl)       step = range * 0.001f;
+            else if (shift) step = range * 0.05f;
+            if (step < 1e-6f) step = 1e-6f;
+
+            bool changed = false;
+            if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow, true)) {
+                *val -= step;
+                changed = true;
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, true)) {
+                *val += step;
+                changed = true;
+            }
+            if (changed) {
+                if (*val < vmin) *val = vmin;
+                if (*val > vmax) *val = vmax;
+            }
         }
 
         float t = (*val - vmin) / (vmax - vmin);

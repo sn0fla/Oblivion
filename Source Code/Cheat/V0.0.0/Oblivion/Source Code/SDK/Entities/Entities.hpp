@@ -32,6 +32,7 @@ struct FrameEntity {
     bool isDormant = false;
     bool hasBones = false;
     bool hasViewAngles = false;
+    bool isVisible = false;
     char name[128] = {};
     char weaponName[32] = {};
 
@@ -56,6 +57,7 @@ struct FrameSnapshot {
     Vector3 localEyePos{};
     Vector3 localVelocity{};
     uint8_t localTeam = 0;
+    uint32_t localIndex = 0xFFFFFFFFu;
     double publishTime = 0.0;
     double buildDuration = 0.0;
 };

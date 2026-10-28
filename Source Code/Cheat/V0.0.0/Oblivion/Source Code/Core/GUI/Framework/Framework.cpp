@@ -24,7 +24,14 @@ namespace Framework {
 
     ImFont* GetIconFont() {
         if (g_iconFont) return g_iconFont;
+
         ImGuiIO& io = ImGui::GetIO();
+
+        if (io.Fonts->IsBuilt()) {
+            g_iconFont = ImGui::GetFont();
+            return g_iconFont;
+        }
+
         ImFontConfig cfg;
         cfg.OversampleH = 4;
         cfg.OversampleV = 4;

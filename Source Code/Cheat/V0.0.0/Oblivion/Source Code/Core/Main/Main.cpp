@@ -33,7 +33,7 @@
 #pragma warning(push)
 #pragma warning(disable: 28251)
 
-bool g_unload_requested = false;
+std::atomic<bool> g_unload_requested{ false };
 
 static bool HasUiActiveFlag()
 {
@@ -96,20 +96,54 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     Animations::BootStart();
     Logging::Info("Overlay created (boot animation started)");
 
-    std::atomic<bool> memReady{ false };
-    std::atomic<bool> memFailed{ false };
     std::thread memThread([&] {
         if (g_StopMemInit.load(std::memory_order_relaxed)) return;
+
         if (mem.Init(xorstr_(L"cs2.exe"))) {
-            memReady.store(true, std::memory_order_release);
             Logging::Info("mem.Init OK (pid=%u, client=0x%llX, engine=0x%llX)",
                 mem.pid,
                 static_cast<unsigned long long>(mem.client),
                 static_cast<unsigned long long>(mem.engine));
+
+            while (!g_StopMemInit.load(std::memory_order_relaxed)) {
+                if (!mem.handle) break;
+
+                DWORD wait = WaitForSingleObject(mem.handle, 500);
+
+                if (wait == WAIT_OBJECT_0) {
+                    Logging::Info("cs2.exe exited (WAIT_OBJECT_0), requesting shutdown");
+                    g_unload_requested.store(true, std::memory_order_release);
+                    return;
+                }
+
+                if (wait == WAIT_FAILED) {
+                    // Handle likely lacks SYNCHRONIZE. Fall back to exit-code polling.
+                    DWORD exitCode = 0;
+                    if (GetExitCodeProcess(mem.handle, &exitCode)) {
+                        if (exitCode != STILL_ACTIVE) {
+                            Logging::Info("cs2.exe exited (exit code %u), requesting shutdown",
+                                static_cast<unsigned>(exitCode));
+                            g_unload_requested.store(true, std::memory_order_release);
+                            return;
+                        }
+                        // Process still alive; wait a bit before retrying.
+                        for (int i = 0; i < 50 && !g_StopMemInit.load(std::memory_order_relaxed); ++i) {
+                            Sleep(10);
+                        }
+                    }
+                    else {
+                        // No query rights either — can't monitor. Stop watching but keep running.
+                        Logging::Info("mem monitor: WaitForSingleObject/GetExitCodeProcess "
+                            "unavailable (err=%lu); stopping monitor (cheat stays loaded)",
+                            GetLastError());
+                        return;
+                    }
+                }
+                // WAIT_TIMEOUT: normal, loop again.
+            }
         }
         else {
             if (g_StopMemInit.load(std::memory_order_relaxed)) return;
-            memFailed.store(true, std::memory_order_release);
             Logging::Error("mem.Init failed (pid=%u)", mem.pid);
         }
         });
@@ -171,7 +205,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         Logging::Sample("render_callback_ms", (FrameTime() - cbStart) * 1000.0);
         Logging::Tick();
 
-        if (g_unload_requested) ov.RequestExit();
+        if (g_unload_requested.load(std::memory_order_acquire)) ov.RequestExit();
         });
 
     g_StopMemInit.store(true, std::memory_order_relaxed);

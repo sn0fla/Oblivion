@@ -288,6 +288,7 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
     frame.localEyePos = Vector3{};
     frame.localVelocity = Vector3{};
     frame.viewMatrix = ViewMatrix{};
+    frame.localIndex = 0xFFFFFFFFu;
 
     if (!mem.client || !mem.pid || !mem.handle) return;
 
@@ -400,7 +401,14 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
         }
 
         const uintptr_t pawn = slot.pawn;
-        if (!pawn || pawn == localPawn) continue;
+        if (!pawn) continue;
+
+        if (pawn == localPawn) {
+            frame.localIndex = (slot.slotIndex > 0)
+                ? static_cast<uint32_t>(slot.slotIndex - 1)
+                : 0u;
+            continue;
+        }
 
         FrameEntity entity{};
         entity.address = pawn;

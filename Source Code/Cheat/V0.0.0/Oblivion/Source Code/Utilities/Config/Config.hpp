@@ -25,6 +25,24 @@ struct Config {
     float aim_fov = 180.0f;
     int   aim_hitbox = 1;
     float aim_smooth = 50.0f;
+    bool  aim_visible_check = false;
+    bool  aim_fov_visualize = false;
+    float aim_fov_visualize_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+    bool  aim_humanize_enable = false;
+    bool  aim_humanize_rand_smooth = false;
+    float aim_humanize_smooth_min = 30.0f;
+    float aim_humanize_smooth_max = 70.0f;
+    bool  aim_humanize_jitter = false;
+    float aim_humanize_jitter_amount = 1.5f;
+    bool  aim_humanize_overshoot = false;
+    float aim_humanize_overshoot_min = 5.0f;
+    float aim_humanize_overshoot_max = 15.0f;
+    bool  aim_humanize_undershoot = false;
+    float aim_humanize_undershoot_min = 5.0f;
+    float aim_humanize_undershoot_max = 15.0f;
+    bool  aim_humanize_curve = false;
+    float aim_humanize_curve_amount = 0.5f;
 
     bool esp_enemy_enable = false;
     bool esp_enemy_box = false;
@@ -144,6 +162,7 @@ struct Config {
 
     bool safe_mode = true;
     bool safe_mode_no_warn = false;
+    bool streamproof = false;
 
     void SetDefaults();
     void Save(const std::string& path);

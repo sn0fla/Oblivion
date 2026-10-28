@@ -4,11 +4,13 @@
 #include "../../../../SDK/Schemas/client_dll.hpp"
 #include "../../../../SDK/Schemas/offsets.hpp"
 #include "../../../Memory/Memory.hpp"
+#include "../../../../External/ImGUI/imgui.h"
 #include <Windows.h>
 #include <cmath>
 #include <cfloat>
 #include <algorithm>
 #include <vector>
+#include <random>
 
 namespace Aimbot {
 
@@ -29,6 +31,9 @@ namespace Aimbot {
     static constexpr double kPendingTimeout = 0.04;
     static constexpr bool   kInvertDx = false;
 
+    static constexpr float  kCurveRefDeg = 10.0f;
+    static constexpr float  kCurveMaxRad = 0.50f;
+
     static Vector3 s_anglesBeforeSend{};
     static float   s_lastSentDx = 0.0f;
     static float   s_lastSentDy = 0.0f;
@@ -37,6 +42,17 @@ namespace Aimbot {
     static double  s_lastSendTime = 0.0;
     static float   s_accumDx = 0.0f;
     static float   s_accumDy = 0.0f;
+
+    static bool  s_aimWasActive = false;
+    static float s_burstCurveDir = 1.0f;
+
+    static std::mt19937 s_rng(0x9E3779B9u);
+
+    static float RandFloat(float lo, float hi) {
+        if (lo >= hi) return lo;
+        std::uniform_real_distribution<float> d(lo, hi);
+        return d(s_rng);
+    }
 
     using NtUserSendInput_t = UINT(NTAPI*)(UINT cInputs, LPINPUT pInputs, int cbSize);
 
@@ -70,10 +86,7 @@ namespace Aimbot {
             if (fn[i] != 0xB8) continue;
             DWORD ssn = *reinterpret_cast<DWORD*>(fn + i + 1);
             if (ssn == 0 || ssn > 0x10000) continue;
-            if (fn[i + 5] == 0x0F && fn[i + 6] == 0x05) {
-                outSSN = ssn;
-                return true;
-            }
+            if (fn[i + 5] == 0x0F && fn[i + 6] == 0x05) { outSSN = ssn; return true; }
         }
         return false;
     }
@@ -92,15 +105,12 @@ namespace Aimbot {
         void* gadget = FindSyscallGadget();
         if (!gadget) return false;
 
-        if (!g_spoofRets[0]) {
-            GetNtReadVirtualMemory();
-        }
+        if (!g_spoofRets[0]) GetNtReadVirtualMemory();
 
         int nFrames = 0;
         if (g_spoofRets[0]) nFrames++;
         if (g_spoofRets[1] && nFrames >= 1) nFrames++;
         if (g_spoofRets[2] && nFrames >= 2) nFrames++;
-        if (nFrames < 1) nFrames = 1;
 
         SIZE_T codeSize = static_cast<SIZE_T>(nFrames) * 6 + 14;
         SIZE_T dataStart = ((codeSize + 7) / 8) * 8;
@@ -111,40 +121,32 @@ namespace Aimbot {
         auto* buf = static_cast<BYTE*>(VirtualAlloc(nullptr, totalSize,
             MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
         if (!buf) return false;
-
         memset(buf, 0xCC, totalSize);
 
         SIZE_T o = 0;
         for (int i = nFrames - 1; i >= 0; --i) {
             SIZE_T pos = o;
             buf[o++] = 0xFF; buf[o++] = 0x35;
-            int32_t disp = static_cast<int32_t>((dataStart + 8 + static_cast<SIZE_T>(i) * 8) - (pos + 6));
-            *reinterpret_cast<int32_t*>(buf + o) = disp;
-            o += 4;
+            int32_t disp = static_cast<int32_t>(
+                (dataStart + 8 + static_cast<SIZE_T>(i) * 8) - (pos + 6));
+            *reinterpret_cast<int32_t*>(buf + o) = disp; o += 4;
         }
-
         buf[o++] = 0x4C; buf[o++] = 0x8B; buf[o++] = 0xD1;
         buf[o++] = 0xB8;
-        *reinterpret_cast<DWORD*>(buf + o) = ssn;
-        o += 4;
+        *reinterpret_cast<DWORD*>(buf + o) = ssn; o += 4;
         SIZE_T jmpPos = o;
         buf[o++] = 0xFF; buf[o++] = 0x25;
-        int32_t jmpDisp = static_cast<int32_t>(dataStart - (jmpPos + 6));
-        *reinterpret_cast<int32_t*>(buf + o) = jmpDisp;
-        o += 4;
-
+        *reinterpret_cast<int32_t*>(buf + o) =
+            static_cast<int32_t>(dataStart - (jmpPos + 6)); o += 4;
         while (o < dataStart) buf[o++] = 0xCC;
 
-        *reinterpret_cast<uintptr_t*>(buf + dataStart + 0) = reinterpret_cast<uintptr_t>(gadget);
-        for (int i = 0; i < nFrames; ++i) {
-            uintptr_t r = g_spoofRets[i];
-            *reinterpret_cast<uintptr_t*>(buf + dataStart + 8 + static_cast<SIZE_T>(i) * 8) = r;
-        }
+        *reinterpret_cast<uintptr_t*>(buf + dataStart) = reinterpret_cast<uintptr_t>(gadget);
+        for (int i = 0; i < nFrames; ++i)
+            *reinterpret_cast<uintptr_t*>(buf + dataStart + 8 + static_cast<SIZE_T>(i) * 8) =
+            g_spoofRets[i];
 
         DWORD oldProt = 0;
-        if (!VirtualProtect(buf, totalSize, PAGE_EXECUTE_READ, &oldProt))
-            return false;
-
+        if (!VirtualProtect(buf, totalSize, PAGE_EXECUTE_READ, &oldProt)) return false;
         s_ntSendInput = reinterpret_cast<NtUserSendInput_t>(buf);
         return true;
     }
@@ -169,15 +171,28 @@ namespace Aimbot {
         return keyDown;
     }
 
+    static bool IsEntitySpotted(const FrameEntity& ent, uint32_t localIndex) {
+        using namespace cs2_dumper::schemas::client_dll;
+        if (!ent.address) return false;
+        if (localIndex == 0xFFFFFFFFu || localIndex > 63u) return false;
+
+        const uintptr_t base = ent.address + C_CSPlayerPawn::m_entitySpottedState;
+
+        const uint32_t low = mem.Read<uint32_t>(base + 0x08);
+        const uint32_t high = mem.Read<uint32_t>(base + 0x0C);
+        const uint64_t mask = (static_cast<uint64_t>(high) << 32) | low;
+
+        return ((mask >> (localIndex & 0x3Fu)) & 1ull) != 0ull;
+    }
+
     static bool PickBestBone(const FrameEntity& ent, int hitboxMask,
         const Vector3& eyePos, const Vector3& viewAngles,
         Vector3& outPos, float& outFov)
     {
         if (!ent.hasBones) {
             const Vector3 fallback = ent.origin + Vector3(0.0f, 0.0f, 64.0f);
-            const Vector3 desired = Math::CalcAngle(eyePos, fallback);
             outPos = fallback;
-            outFov = Math::GetFov(viewAngles, desired);
+            outFov = Math::GetFov(viewAngles, Math::CalcAngle(eyePos, fallback));
             return true;
         }
 
@@ -185,14 +200,13 @@ namespace Aimbot {
             return ent.bones[static_cast<int>(idx)];
             };
 
-        bool found = false;
-        float bestFov = FLT_MAX;
+        bool    found = false;
+        float   bestFov = FLT_MAX;
         Vector3 bestPos{};
 
         auto consider = [&](const Vector3& pos) {
             if (pos.x == 0.0f && pos.y == 0.0f && pos.z == 0.0f) return;
-            const Vector3 desired = Math::CalcAngle(eyePos, pos);
-            const float fov = Math::GetFov(viewAngles, desired);
+            const float fov = Math::GetFov(viewAngles, Math::CalcAngle(eyePos, pos));
             if (fov < bestFov) { bestFov = fov; bestPos = pos; found = true; }
             };
 
@@ -206,18 +220,17 @@ namespace Aimbot {
         if (hitboxMask & 2)  consider(B(BoneIndex::Neck));
         if (hitboxMask & 4)  consider(B(BoneIndex::Spine_2));
         if (hitboxMask & 8)  consider(B(BoneIndex::Spine_1));
-
         if (hitboxMask & 16) {
             consider(B(BoneIndex::LeftUpperArm));  consider(B(BoneIndex::RightUpperArm));
             consider(B(BoneIndex::LeftForearm));   consider(B(BoneIndex::RightForearm));
             consider(B(BoneIndex::LeftHand));      consider(B(BoneIndex::RightHand));
         }
         if (hitboxMask & 32) {
-            consider(B(BoneIndex::LeftHip));  consider(B(BoneIndex::RightHip));
-            consider(B(BoneIndex::LeftKnee)); consider(B(BoneIndex::RightKnee));
+            consider(B(BoneIndex::LeftHip));   consider(B(BoneIndex::RightHip));
+            consider(B(BoneIndex::LeftKnee));  consider(B(BoneIndex::RightKnee));
         }
         if (hitboxMask & 64) {
-            consider(B(BoneIndex::LeftFoot)); consider(B(BoneIndex::RightFoot));
+            consider(B(BoneIndex::LeftFoot));  consider(B(BoneIndex::RightFoot));
         }
 
         if (!found) {
@@ -228,6 +241,7 @@ namespace Aimbot {
             consider(headBone + axis * 0.75f);
         }
         if (!found) return false;
+
         outPos = bestPos;
         outFov = bestFov;
         return true;
@@ -248,7 +262,6 @@ namespace Aimbot {
         input.mi.dwFlags = MOUSEEVENTF_MOVE;
         input.mi.time = 0;
         input.mi.dwExtraInfo = 0;
-
         EnsureSyscall();
         if (s_ntSendInput)
             s_ntSendInput(1, &input, sizeof(INPUT));
@@ -267,7 +280,6 @@ namespace Aimbot {
     static void UpdateCalibration(const Vector3& anglesNow) {
         const float sentDx = std::fabsf(s_lastSentDx);
         const float sentDy = std::fabsf(s_lastSentDy);
-
         if (sentDx >= kSampleMinPx) {
             const float obsYaw = std::fabsf(UnwrapYaw(anglesNow.y - s_anglesBeforeSend.y));
             if (obsYaw > 0.02f) BlendCalibration(obsYaw / sentDx);
@@ -278,10 +290,73 @@ namespace Aimbot {
         }
     }
 
+    void RenderFOV(const ViewMatrix& vm) {
+        if (!config.aim_fov_visualize) return;
+        if (config.aim_fov <= 0.0f) return;
+
+        ImGuiIO& io = ImGui::GetIO();
+        const float W = io.DisplaySize.x;
+        const float H = io.DisplaySize.y;
+        if (W < 32.0f || H < 32.0f) return;
+
+        // Row 0 of viewProj = right · P00 ; row 1 = up · P11.
+        // Norms give P00 = 1/tan(hFov/2), P11 = 1/tan(vFov/2), independent of camera rotation.
+        const float sx = std::sqrt(vm[0][0] * vm[0][0] + vm[0][1] * vm[0][1] + vm[0][2] * vm[0][2]);
+        const float sy = std::sqrt(vm[1][0] * vm[1][0] + vm[1][1] * vm[1][1] + vm[1][2] * vm[1][2]);
+        if (!std::isfinite(sx) || !std::isfinite(sy)) return;
+        if (sx < 1e-4f || sy < 1e-4f) return;
+        if (sx > 100.0f || sy > 100.0f) return;
+
+        const float aimFovDeg = std::clamp(config.aim_fov, 0.1f, 85.0f);
+        const float tanFov = std::tan(aimFovDeg * Math::PI / 180.0f);
+        if (!std::isfinite(tanFov) || tanFov <= 0.0f) return;
+
+        const float rx = tanFov * (W * 0.5f) * sx;
+        const float ry = tanFov * (H * 0.5f) * sy;
+        if (!std::isfinite(rx) || !std::isfinite(ry)) return;
+        if (rx < 1.5f && ry < 1.5f) return;
+        if (rx > W * 8.0f || ry > H * 8.0f) return;
+
+        const float* c = config.aim_fov_visualize_color;
+        const ImU32 col = IM_COL32(
+            static_cast<int>(c[0] * 255.0f + 0.5f),
+            static_cast<int>(c[1] * 255.0f + 0.5f),
+            static_cast<int>(c[2] * 255.0f + 0.5f),
+            static_cast<int>(c[3] * 255.0f + 0.5f));
+
+        ImDrawList* dl = ImGui::GetBackgroundDrawList();
+        if (!dl) return;
+        const ImVec2 center(W * 0.5f, H * 0.5f);
+
+        if (std::fabsf(rx - ry) < 0.5f) {
+            dl->AddCircle(center, (rx + ry) * 0.5f, col, 96, 1.5f);
+        }
+        else {
+            const int seg = 96;
+            ImVec2 prev(center.x + rx, center.y);
+            for (int i = 1; i <= seg; ++i) {
+                const float a = static_cast<float>(i) / static_cast<float>(seg) * 2.0f * Math::PI;
+                ImVec2 pt(center.x + rx * cosf(a), center.y + ry * sinf(a));
+                dl->AddLine(prev, pt, col, 1.5f);
+                prev = pt;
+            }
+        }
+    }
+
     void Tick(const FrameSnapshot& frame) {
         if (!config.aim_enable) return;
-        if (config.show_menu)   return;
-        if (!mem.client || !mem.handle) return;
+
+        RenderFOV(frame.viewMatrix);
+
+        if (config.show_menu)            return;
+        if (!mem.client || !mem.handle)  return;
+
+        const bool aiming = ShouldAim();
+
+        if (aiming && !s_aimWasActive) {
+            s_burstCurveDir = (RandFloat(0.0f, 1.0f) < 0.5f) ? -1.0f : 1.0f;
+        }
+        s_aimWasActive = aiming;
 
         Vector3 viewAngles = mem.Read<Vector3>(
             mem.client + cs2_dumper::offsets::client_dll::dwViewAngles);
@@ -294,13 +369,12 @@ namespace Aimbot {
             const float dYaw = std::fabsf(UnwrapYaw(viewAngles.y - s_anglesBeforeSend.y));
             const bool changed = (dPitch > 0.001f) || (dYaw > 0.001f);
             const bool timedOut = (now - s_pendingTime) > kPendingTimeout;
-
             if (!changed && !timedOut) return;
             if (changed && !timedOut) UpdateCalibration(viewAngles);
             s_pending = false;
         }
 
-        if (!ShouldAim()) {
+        if (!aiming) {
             s_accumDx = 0.0f;
             s_accumDy = 0.0f;
             s_pending = false;
@@ -315,17 +389,23 @@ namespace Aimbot {
         if (eyePos.x == 0.0f && eyePos.y == 0.0f && eyePos.z == 0.0f)
             eyePos = frame.localOrigin + Vector3(0.0f, 0.0f, 64.0625f);
 
+        const bool wantVis = config.aim_visible_check;
+
         const FrameEntity* best = nullptr;
-        Vector3 bestPos{};
-        float bestFov = (config.aim_fov > 0.0f) ? config.aim_fov : 180.0f;
+        Vector3             bestPos{};
+        float               bestFov = (config.aim_fov > 0.0f) ? config.aim_fov : 180.0f;
 
         for (const auto& ent : frame.entities) {
             if (!ent.isAlive || ent.isDormant) continue;
             if (ent.team == frame.localTeam)   continue;
             if (ent.health == 0)               continue;
 
+            if (wantVis && frame.localIndex != 0xFFFFFFFFu) {
+                if (!IsEntitySpotted(ent, frame.localIndex)) continue;
+            }
+
             Vector3 pos{};
-            float fov = 0.0f;
+            float   fov = 0.0f;
             if (!PickBestBone(ent, config.aim_hitbox, eyePos, viewAngles, pos, fov))
                 continue;
             if (fov > bestFov) continue;
@@ -347,16 +427,70 @@ namespace Aimbot {
         if (std::fabsf(dPitch) < deadzone) dPitch = 0.0f;
         if (dYaw == 0.0f && dPitch == 0.0f) return;
 
-        if (config.aim_smooth > 0.0f) {
-            const float s = config.aim_smooth;
-            const float denom = s + s * s * kSmoothCurve;
-            const float maxStepDeg = kMaxDegPerFrame / denom;
-            dYaw = std::clamp(dYaw, -maxStepDeg, maxStepDeg);
-            dPitch = std::clamp(dPitch, -maxStepDeg, maxStepDeg);
+        const bool humOn = config.aim_humanize_enable;
+        float      smoothVal = config.aim_smooth;
+
+        if (humOn && config.aim_humanize_rand_smooth) {
+            const float lo = (std::min)(config.aim_humanize_smooth_min, config.aim_humanize_smooth_max);
+            const float hi = (std::max)(config.aim_humanize_smooth_min, config.aim_humanize_smooth_max);
+            smoothVal = RandFloat(lo, hi);
         }
 
-        const float dxPixels = -dYaw / s_degPerPixel;
-        const float dyPixels = dPitch / s_degPerPixel;
+        if (smoothVal > 0.0f) {
+            const float denom = smoothVal + smoothVal * smoothVal * kSmoothCurve;
+            const float maxStepDeg = kMaxDegPerFrame / denom;
+
+            const float mag = std::sqrt(dYaw * dYaw + dPitch * dPitch);
+            if (mag > maxStepDeg) {
+                const float scale = maxStepDeg / mag;
+                dYaw *= scale;
+                dPitch *= scale;
+            }
+        }
+
+        if (humOn && config.aim_humanize_curve) {
+            const float c = std::clamp(config.aim_humanize_curve_amount, 0.0f, 1.0f);
+            if (c > 0.0f) {
+                const float mag = std::sqrt(dYaw * dYaw + dPitch * dPitch);
+                if (mag > 1e-3f) {
+                    const float distFactor = (std::min)(mag / kCurveRefDeg, 1.0f);
+                    const float theta = s_burstCurveDir * c * distFactor * kCurveMaxRad;
+                    const float ca = std::cos(theta);
+                    const float sa = std::sin(theta);
+                    const float ny = dYaw * ca - dPitch * sa;
+                    const float np = dYaw * sa + dPitch * ca;
+                    dYaw = ny;
+                    dPitch = np;
+                }
+            }
+        }
+
+        if (humOn) {
+            float mult = 1.0f;
+            if (config.aim_humanize_overshoot) {
+                const float lo = (std::min)(config.aim_humanize_overshoot_min, config.aim_humanize_overshoot_max);
+                const float hi = (std::max)(config.aim_humanize_overshoot_min, config.aim_humanize_overshoot_max);
+                mult += RandFloat(lo, hi) * 0.01f;
+            }
+            if (config.aim_humanize_undershoot) {
+                const float lo = (std::min)(config.aim_humanize_undershoot_min, config.aim_humanize_undershoot_max);
+                const float hi = (std::max)(config.aim_humanize_undershoot_min, config.aim_humanize_undershoot_max);
+                mult -= RandFloat(lo, hi) * 0.01f;
+            }
+            dYaw *= mult;
+            dPitch *= mult;
+        }
+
+        float dxPixels = -dYaw / s_degPerPixel;
+        float dyPixels = dPitch / s_degPerPixel;
+
+        if (humOn && config.aim_humanize_jitter) {
+            const float j = (std::max)(0.0f, config.aim_humanize_jitter_amount);
+            if (j > 0.0f) {
+                dxPixels += RandFloat(-j, j);
+                dyPixels += RandFloat(-j, j);
+            }
+        }
 
         if (!std::isfinite(dxPixels) || !std::isfinite(dyPixels)) return;
 
@@ -365,7 +499,6 @@ namespace Aimbot {
 
         LONG dx = static_cast<LONG>(s_accumDx);
         LONG dy = static_cast<LONG>(s_accumDy);
-
         if (dx == 0 && dy == 0) return;
 
         const double now = FrameTime();
@@ -373,7 +506,6 @@ namespace Aimbot {
 
         s_accumDx -= static_cast<float>(dx);
         s_accumDy -= static_cast<float>(dy);
-
         if (kInvertDx) dx = -dx;
 
         s_lastSendTime = now;
