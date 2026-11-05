@@ -40,4 +40,5 @@ namespace Framework {
         float thickness, float pulsePos, float pulseWidth);
     void DrawIconGlyph(ImDrawList* dl, int type, ImVec2 c,
         float boxSz, float fontSz, ImU32 col);
+    bool IsGameForeground();
 }

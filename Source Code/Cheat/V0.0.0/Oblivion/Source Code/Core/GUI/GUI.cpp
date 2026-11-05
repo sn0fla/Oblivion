@@ -1397,10 +1397,11 @@ namespace GUI {
             }
 
             if (g_humExpandT[fi] > 0.001f) {
-                const float sliderAlpha = rowAlpha * (featOn ? 1.0f : 0.5f);
+                const float expandT = g_humExpandT[fi];
+                const float sliderAlpha = rowAlpha * (featOn ? 1.0f : 0.5f) * expandT;
 
                 auto drawSliderRow = [&](const char* label, float* val, float vmin, float vmax, int uid, const char* fmt) {
-                    const float cy = rowY + optRowH * 0.5f;
+                    const float cy = rowY + optRowH * 0.5f * expandT;
                     const float indentX = contentX + indent;
 
                     float labelW = 30.0f * s;
@@ -1435,7 +1436,7 @@ namespace GUI {
                         Widgets::DrawDashedSlider(dl, sr, val, vmin, vmax, sliderAlpha, s, sid);
                     }
 
-                    rowY += optRowH * g_humExpandT[fi];
+                    rowY += optRowH * expandT;
                     };
 
                 drawSliderRow(s1label, s1, s1min, s1max, 0, s1fmt);
