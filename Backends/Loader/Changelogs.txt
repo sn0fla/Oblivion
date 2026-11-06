@@ -1,8 +1,7 @@
-Aimbot
-- Added humanization for more natural aiming behavior.
-- Reworked the FOV system.
-- Further refined and improved the smoothing system.
-
-System
-- Added Streamproof.
-- Improved synchronization.
+- Added Reaction Time (Random) for Aimbot (features configurable Min/Max sliders in milliseconds).
+- Added Hitbox Priority dropdown to Aimbot (Closest, Head Priority, Body Priority).
+- Added scrollbars to Aimbot and Humanization UI cards to prevent overflow.
+- Overhauled Aimbot Humanization internals:
+  - Replaced per-tick overshoot/undershoot randomness with a proper single-event correction phase per burst.
+  - Added a minimum-jerk velocity envelope for smoother, more human-like flick acceleration/deceleration.
+  - Replaced white-noise jitter with a band-limited value-noise source to simulate realistic hand tremors.
