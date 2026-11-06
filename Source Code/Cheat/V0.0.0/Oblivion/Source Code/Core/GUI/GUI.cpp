@@ -92,6 +92,12 @@ namespace GUI {
     static float  g_aimHitboxHover[7] = {};
     static float  g_aimHitboxSel[7] = {};
 
+    static bool   g_aimPrioExpanded = false;
+    static float  g_aimPrioExpandT = 0.0f;
+    static float  g_aimPrioHover = 0.0f;
+    static float  g_aimPrioOptHover[3] = { 0.0f, 0.0f, 0.0f };
+    static float  g_aimPrioOptSel[3] = { 0.0f, 0.0f, 0.0f };
+
     static float  g_aimVisibleHover = 0.0f;
     static float  g_aimVisibleSel = 0.0f;
 
@@ -102,7 +108,7 @@ namespace GUI {
     static float  g_humEnableHover = 0.0f;
     static float  g_humEnableSel = 0.0f;
 
-    static constexpr int kHumFeatureCount = 5;
+    static constexpr int kHumFeatureCount = 6;
     static bool  g_humExpanded[kHumFeatureCount] = {};
     static float g_humExpandT[kHumFeatureCount] = {};
     static float g_humExpHover[kHumFeatureCount] = {};
@@ -726,11 +732,6 @@ namespace GUI {
             }
         }
 
-        const int a8 = (int)(alpha * 255.0f);
-        const int borderA = (int)(alpha * 70.0f);
-        dl->AddRectFilled(min, max, IM_COL32(26, 26, 34, a8), 6.0f);
-        dl->AddRect(min, max, IM_COL32(189, 176, 255, borderA), 6.0f, 0, 1.0f);
-
         const float pad = 14.0f * s;
         const float rowH = 24.0f * s;
         const float optRowH = 22.0f * s;
@@ -899,12 +900,12 @@ namespace GUI {
                         IM_COL32(120, 110, 180, (int)(rowA * 0.22f * st * 255.0f)), 3.0f * s);
                 }
 
-                if (textFont) {
-                    const char* txt = modes[i];
-                    const ImVec2 tsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, txt);
-                    const float tx = rMin.x + 8.0f * s;
-                    const float ty = rMin.y + (optRowH - tsz.y) * 0.5f;
+                const char* txt = modes[i];
+                ImVec2 tsz = textFont ? textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, txt) : ImVec2(0.0f, 0.0f);
+                const float tx = rMin.x + 8.0f * s;
+                const float ty = rMin.y + (optRowH - tsz.y) * 0.5f;
 
+                if (textFont) {
                     const int rC = (int)(150 + (235 - 150) * st);
                     const int gC = (int)(140 + (228 - 140) * st);
                     const int bC = (int)(205 + (255 - 205) * st);
@@ -915,9 +916,9 @@ namespace GUI {
 
                 if (g_aimModeOptSel[i] > 0.01f) {
                     const float uH = 2.0f * s;
-                    const float uW = (rMax.x - rMin.x) * 0.4f * g_aimModeOptSel[i];
+                    const float uW = (tsz.x > 0.0f ? tsz.x : (rMax.x - rMin.x) * 0.4f) * g_aimModeOptSel[i];
                     const float uY = rMax.y - uH - 1.0f * s;
-                    const float cx = (rMin.x + rMax.x) * 0.5f;
+                    const float cx = (tsz.x > 0.0f) ? (tx + tsz.x * 0.5f) : ((rMin.x + rMax.x) * 0.5f);
                     dl->AddRectFilled(
                         ImVec2(cx - uW * 0.5f, uY),
                         ImVec2(cx + uW * 0.5f, uY + uH),
@@ -1069,6 +1070,115 @@ namespace GUI {
             }
 
             rowY += rowH;
+        }
+
+        {
+            const float cy = rowY + rowH * 0.5f;
+            const char* lbl = "Priority";
+            const ImVec2 lsz = textFont
+                ? textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, lbl)
+                : ImVec2(30.0f * s, labelFs);
+
+            if (textFont)
+                dl->AddText(textFont, labelFs,
+                    ImVec2(floorf(contentX + 0.5f), floorf(cy - lsz.y * 0.5f + 0.5f)),
+                    IM_COL32(200, 195, 235, (int)(alpha * 255.0f)), lbl);
+
+            const ImVec2 expC(contentX + lsz.x + expGap + iconSz * 0.5f, cy);
+            const float eh = iconSz * 0.75f;
+            const ImVec2 expMin(expC.x - eh, expC.y - eh);
+            const ImVec2 expMax(expC.x + eh, expC.y + eh);
+
+            const bool expHov = mouse.x >= expMin.x && mouse.x <= expMax.x
+                && mouse.y >= expMin.y && mouse.y <= expMax.y;
+
+            if (expHov && ImGui::IsMouseClicked(0)) {
+                Framework::PlayClickSound();
+                g_aimPrioExpanded = !g_aimPrioExpanded;
+            }
+
+            g_aimPrioHover += ((expHov ? 1.0f : 0.0f) - g_aimPrioHover) * kApproach;
+            g_aimPrioExpandT += (((g_aimPrioExpanded) ? 1.0f : 0.0f) - g_aimPrioExpandT) * kApproach;
+
+            const int eR = (int)(150 + (189 - 150) * g_aimPrioHover);
+            const int eG = (int)(140 + (176 - 140) * g_aimPrioHover);
+            const int eB = (int)(205 + (255 - 205) * g_aimPrioHover);
+            const ImU32 eCol = IM_COL32(eR, eG, eB, (int)(alpha * 255.0f));
+            DrawChevronLocal(dl, expC, iconSz, 1.5707963f * g_aimPrioExpandT, eCol, 1.6f * s);
+
+            static const char* prios[] = { "Closest", "Head Priority", "Body Priority" };
+            const char* pTxt = prios[config.aim_hitbox_priority];
+            if (textFont) {
+                const float mx = expMax.x + 6.0f * s;
+                const ImVec2 msz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, pTxt);
+                const float my = cy - msz.y * 0.5f;
+                dl->AddText(textFont, labelFs, ImVec2(floorf(mx + 0.5f), floorf(my + 0.5f)),
+                    IM_COL32(200, 190, 240, (int)(alpha * 255.0f)), pTxt);
+            }
+
+            rowY += rowH;
+        }
+
+        if (g_aimPrioExpandT > 0.001f) {
+            static const char* prios[] = { "Closest", "Head Priority", "Body Priority" };
+            const float rowA = alpha * g_aimPrioExpandT;
+
+            for (int i = 0; i < 3; ++i) {
+                const ImVec2 rMin(contentX + indent, rowY);
+                const ImVec2 rMax(max.x - pad, rowY + optRowH);
+
+                ImGui::SetCursorScreenPos(rMin);
+                ImGui::PushID(3000 + i);
+                ImGui::InvisibleButton("##prio_opt", ImVec2(rMax.x - rMin.x, optRowH));
+                ImGui::PopID();
+
+                const bool hov = ImGui::IsItemHovered();
+                const bool sel = (config.aim_hitbox_priority == i);
+
+                g_aimPrioOptHover[i] += ((hov ? 1.0f : 0.0f) - g_aimPrioOptHover[i]) * kApproach;
+                g_aimPrioOptSel[i] += (((sel) ? 1.0f : 0.0f) - g_aimPrioOptSel[i]) * kApproach;
+
+                if (ImGui::IsItemClicked(0)) {
+                    Framework::PlayClickSound();
+                    config.aim_hitbox_priority = i;
+                    g_aimPrioExpanded = false;
+                }
+
+                const float st = (g_aimPrioOptSel[i] > g_aimPrioOptHover[i]) ? g_aimPrioOptSel[i] : g_aimPrioOptHover[i];
+
+                if (st > 0.005f) {
+                    dl->AddRectFilled(rMin, rMax,
+                        IM_COL32(120, 110, 180, (int)(rowA * 0.22f * st * 255.0f)), 3.0f * s);
+                }
+
+                const char* txt = prios[i];
+                ImVec2 tsz = textFont ? textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, txt) : ImVec2(0.0f, 0.0f);
+                const float tx = rMin.x + 8.0f * s;
+                const float ty = rMin.y + (optRowH - tsz.y) * 0.5f;
+
+                if (textFont) {
+                    const int rC = (int)(150 + (235 - 150) * st);
+                    const int gC = (int)(140 + (228 - 140) * st);
+                    const int bC = (int)(205 + (255 - 205) * st);
+
+                    dl->AddText(textFont, labelFs, ImVec2(floorf(tx + 0.5f), floorf(ty + 0.5f)),
+                        IM_COL32(rC, gC, bC, (int)(rowA * 255.0f)), txt);
+                }
+
+                if (g_aimPrioOptSel[i] > 0.01f) {
+                    const float uH = 2.0f * s;
+                    const float uW = (tsz.x > 0.0f ? tsz.x : (rMax.x - rMin.x) * 0.4f) * g_aimPrioOptSel[i];
+                    const float uY = rMax.y - uH - 1.0f * s;
+                    const float cx = (tsz.x > 0.0f) ? (tx + tsz.x * 0.5f) : ((rMin.x + rMax.x) * 0.5f);
+                    dl->AddRectFilled(
+                        ImVec2(cx - uW * 0.5f, uY),
+                        ImVec2(cx + uW * 0.5f, uY + uH),
+                        IM_COL32(189, 176, 255, (int)(g_aimPrioOptSel[i] * rowA * 255.0f)),
+                        uH * 0.5f);
+                }
+
+                rowY += optRowH * g_aimPrioExpandT;
+            }
         }
 
         {
@@ -1225,11 +1335,6 @@ namespace GUI {
     static void DrawHumanizeCard(ImDrawList* dl, ImVec2 min, ImVec2 max,
         float alpha, float s, ImFont* textFont, float labelFs, float dt)
     {
-        const int a8 = (int)(alpha * 255.0f);
-        const int borderA = (int)(alpha * 70.0f);
-        dl->AddRectFilled(min, max, IM_COL32(26, 26, 34, a8), 6.0f);
-        dl->AddRect(min, max, IM_COL32(189, 176, 255, borderA), 6.0f, 0, 1.0f);
-
         const float pad = 14.0f * s;
         const float rowH = 24.0f * s;
         const float optRowH = 22.0f * s;
@@ -1339,6 +1444,13 @@ namespace GUI {
                 fEnable = &config.aim_humanize_curve;
                 s1 = &config.aim_humanize_curve_amount; s1min = 0.0f; s1max = 1.0f; s1label = "Amount"; s1fmt = "%.2f";
                 break;
+            case 5:
+                fname = "Reaction Delay";
+                fEnable = &config.aim_humanize_reaction_enable;
+                s1 = &config.aim_humanize_reaction_min; s1min = 0.0f; s1max = 500.0f; s1label = "Min"; s1fmt = "%.0f ms";
+                s2 = &config.aim_humanize_reaction_max; s2min = 0.0f; s2max = 500.0f; s2label = "Max"; s2fmt = "%.0f ms";
+                twoSliders = true;
+                break;
             }
 
             const bool featOn = *fEnable;
@@ -1413,10 +1525,16 @@ namespace GUI {
                             IM_COL32(190, 185, 225, (int)(sliderAlpha * 255.0f)), label);
                     }
 
-                    char buf[16];
+                    char buf[32];
                     snprintf(buf, sizeof(buf), fmt, *val);
-                    const float valueW = 36.0f * s;
+
+                    float valueW = 36.0f * s;
                     if (textFont) {
+                        char maxBuf[32];
+                        snprintf(maxBuf, sizeof(maxBuf), fmt, vmax);
+                        const ImVec2 maxVsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, maxBuf);
+                        valueW = maxVsz.x + 4.0f * s;
+
                         const ImVec2 vsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, buf);
                         dl->AddText(textFont, labelFs,
                             ImVec2(max.x - pad - vsz.x, cy - vsz.y * 0.5f),
@@ -2497,12 +2615,46 @@ namespace GUI {
             const ImVec2 cmin(contentX, contentY);
             const ImVec2 cmax(contentX + cardW, contentY + cardH);
 
-            DrawAimbotCard(dl, cmin, cmax, a * s, s, font, labelFs, dt);
-
             const ImVec2 c2min(contentX + cardW + gap, contentY);
             const ImVec2 c2max(c2min.x + cardW, contentY + cardH);
 
-            DrawHumanizeCard(dl, c2min, c2max, a * s, s, font, labelFs, dt);
+            dl->AddRectFilled(cmin, cmax, IM_COL32(26, 26, 34, (int)(a * s * 255)), 6.0f);
+            dl->AddRect(cmin, cmax, IM_COL32(189, 176, 255, (int)(a * s * 70)), 6.0f, 0, 1.0f);
+
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f * s);
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 8.0f * s);
+            ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, 4.0f * s);
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, ImVec4(0.08f, 0.08f, 0.11f, 0.55f));
+            ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, ImVec4(0.741f, 0.690f, 1.0f, 0.35f));
+            ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, ImVec4(0.741f, 0.690f, 1.0f, 0.55f));
+            ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabActive, ImVec4(0.741f, 0.690f, 1.0f, 0.80f));
+
+            ImGui::SetCursorScreenPos(cmin);
+            ImGui::BeginChild("##aim_scroll", ImVec2(cardW, cardH), false, ImGuiWindowFlags_NoSavedSettings);
+            ImDrawList* cdl = ImGui::GetWindowDrawList();
+            float scrollY = ImGui::GetScrollY();
+            ImVec2 drawMin(cmin.x, cmin.y - scrollY);
+            ImVec2 drawMax(cmax.x, cmax.y - scrollY);
+            DrawAimbotCard(cdl, drawMin, drawMax, a * s, s, font, labelFs, dt);
+            ImGui::EndChild();
+
+            dl->AddRectFilled(c2min, c2max, IM_COL32(26, 26, 34, (int)(a * s * 255)), 6.0f);
+            dl->AddRect(c2min, c2max, IM_COL32(189, 176, 255, (int)(a * s * 70)), 6.0f, 0, 1.0f);
+
+            ImGui::SetCursorScreenPos(c2min);
+            ImGui::BeginChild("##hum_scroll", ImVec2(cardW, cardH), false, ImGuiWindowFlags_NoSavedSettings);
+            ImDrawList* cdl2 = ImGui::GetWindowDrawList();
+            float scrollY2 = ImGui::GetScrollY();
+            ImVec2 drawMin2(c2min.x, c2min.y - scrollY2);
+            ImVec2 drawMax2(c2max.x, c2max.y - scrollY2);
+            DrawHumanizeCard(cdl2, drawMin2, drawMax2, a * s, s, font, labelFs, dt);
+            ImGui::EndChild();
+
+            ImGui::PopStyleColor(5);
+            ImGui::PopStyleVar(5);
         }
         else if (showEspCard) {
             const float pad = 16.0f * s;

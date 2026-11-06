@@ -69,6 +69,7 @@ void Config::SetDefaults() {
     aim_key = 0;
     aim_fov = 180.0f;
     aim_hitbox = 1;
+    aim_hitbox_priority = 0;
     aim_smooth = 50.0f;
     aim_visible_check = false;
     aim_fov_visualize = false;
@@ -91,6 +92,9 @@ void Config::SetDefaults() {
     aim_humanize_undershoot_max = 15.0f;
     aim_humanize_curve = false;
     aim_humanize_curve_amount = 0.5f;
+    aim_humanize_reaction_enable = false;
+    aim_humanize_reaction_min = 120.0f;
+    aim_humanize_reaction_max = 280.0f;
 
     esp_enemy_enable = false;
     esp_enemy_box = false;
@@ -226,6 +230,7 @@ void Config::Save(const std::string& path) {
     file << "key = " << aim_key << "\n";
     file << "fov = " << aim_fov << "\n";
     file << "hitbox = " << aim_hitbox << "\n";
+    file << "hitbox_priority = " << aim_hitbox_priority << "\n";
     file << "smooth = " << aim_smooth << "\n";
     file << "visible_check = " << (aim_visible_check ? "true" : "false") << "\n";
     file << "fov_visualize = " << (aim_fov_visualize ? "true" : "false") << "\n";
@@ -244,6 +249,9 @@ void Config::Save(const std::string& path) {
     file << "humanize_undershoot_max = " << aim_humanize_undershoot_max << "\n";
     file << "humanize_curve = " << (aim_humanize_curve ? "true" : "false") << "\n";
     file << "humanize_curve_amount = " << aim_humanize_curve_amount << "\n";
+    file << "humanize_reaction_enable = " << (aim_humanize_reaction_enable ? "true" : "false") << "\n";
+    file << "humanize_reaction_min = " << aim_humanize_reaction_min << "\n";
+    file << "humanize_reaction_max = " << aim_humanize_reaction_max << "\n";
 
     file << "\n[ESP_Enemy]\n";
     file << "enable = " << (esp_enemy_enable ? "true" : "false") << "\n";
@@ -463,6 +471,11 @@ void Config::Load(const std::string& path) {
                 if (aim_hitbox < 0) aim_hitbox = 0;
                 if (aim_hitbox > 127) aim_hitbox = 127;
             }
+            else if (key == "hitbox_priority") {
+                try { aim_hitbox_priority = std::stoi(value); }
+                catch (...) { aim_hitbox_priority = 0; }
+                if (aim_hitbox_priority < 0 || aim_hitbox_priority > 2) aim_hitbox_priority = 0;
+            }
             else if (key == "smooth") {
                 try { aim_smooth = std::stof(value); }
                 catch (...) { aim_smooth = 50.0f; }
@@ -525,6 +538,19 @@ void Config::Load(const std::string& path) {
                 catch (...) {}
                 if (aim_humanize_curve_amount < 0.0f) aim_humanize_curve_amount = 0.0f;
                 if (aim_humanize_curve_amount > 1.0f) aim_humanize_curve_amount = 1.0f;
+            }
+            else if (key == "humanize_reaction_enable") aim_humanize_reaction_enable = b;
+            else if (key == "humanize_reaction_min") {
+                try { aim_humanize_reaction_min = std::stof(value); }
+                catch (...) {}
+                if (aim_humanize_reaction_min < 0.0f) aim_humanize_reaction_min = 0.0f;
+                if (aim_humanize_reaction_min > 1000.0f) aim_humanize_reaction_min = 1000.0f;
+            }
+            else if (key == "humanize_reaction_max") {
+                try { aim_humanize_reaction_max = std::stof(value); }
+                catch (...) {}
+                if (aim_humanize_reaction_max < 0.0f) aim_humanize_reaction_max = 0.0f;
+                if (aim_humanize_reaction_max > 1000.0f) aim_humanize_reaction_max = 1000.0f;
             }
         }
         else if (currentSection == "ESP_Enemy") {

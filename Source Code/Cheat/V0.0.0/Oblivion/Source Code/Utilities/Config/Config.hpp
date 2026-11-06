@@ -24,6 +24,7 @@ struct Config {
     int   aim_key = 0;
     float aim_fov = 180.0f;
     int   aim_hitbox = 1;
+    int   aim_hitbox_priority = 0;
     float aim_smooth = 50.0f;
     bool  aim_visible_check = false;
     bool  aim_fov_visualize = false;
@@ -43,6 +44,9 @@ struct Config {
     float aim_humanize_undershoot_max = 15.0f;
     bool  aim_humanize_curve = false;
     float aim_humanize_curve_amount = 0.5f;
+    bool  aim_humanize_reaction_enable = false;
+    float aim_humanize_reaction_min = 120.0f;
+    float aim_humanize_reaction_max = 280.0f;
 
     bool esp_enemy_enable = false;
     bool esp_enemy_box = false;
