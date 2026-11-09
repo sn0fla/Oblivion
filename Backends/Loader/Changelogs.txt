@@ -1,7 +1,3 @@
-- Added Reaction Time (Random) for Aimbot (features configurable Min/Max sliders in milliseconds).
-- Added Hitbox Priority dropdown to Aimbot (Closest, Head Priority, Body Priority).
-- Added scrollbars to Aimbot and Humanization UI cards to prevent overflow.
-- Overhauled Aimbot Humanization internals:
-  - Replaced per-tick overshoot/undershoot randomness with a proper single-event correction phase per burst.
-  - Added a minimum-jerk velocity envelope for smoother, more human-like flick acceleration/deceleration.
-  - Replaced white-noise jitter with a band-limited value-noise source to simulate realistic hand tremors.
+- Improved overall performance and stability.
+- Enhanced security and protection.
+- Added Per-Weapon Aimbot Configuration, allowing you to customize aimbot settings individually for each weapon.
