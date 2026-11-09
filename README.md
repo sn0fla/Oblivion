@@ -1,3 +1,4 @@
+```markdown
 # 🕶️ Oblivion — CS2 External Cheat & Overlay
 
 <p align="center">
@@ -258,3 +259,221 @@ hitbox = 1
 hitbox_priority = 0
 smooth = 32
 ...
+```
+
+The `weapons` field is a `|`-separated list of weapon names.
+
+### Code map (for developers)
+
+| What | File |
+|------|------|
+| `AimWeaponGroup` struct + `aim_groups` vector + `CurrentAimEdit()` | `Config.hpp` |
+| Save/Load of `[Aimbot_Group_N]` sections | `Config.cpp` |
+| Group + Weapons expanders, `kAimWeaponPreset[33]`, `WeaponGroupToggle`, `FindGroupByName` | `GUI.cpp → DrawAimbotCard()` |
+| Runtime selection via `WeaponNameMatches` | `Aimbot.cpp → Tick()` |
+| Weapon name resolution (`GetWeaponNameFromPawn`) | `Weapon.cpp` |
+
+---
+
+## ⚙️ Configuration
+
+Configurations are stored as `.ini` files in:
+
+```
+C:\Oblivion\Configurations\
+```
+
+You can:
+- Create new configs
+- Save current settings to the selected config (with overwrite confirmation)
+- Load an existing config (with confirmation)
+- Delete a config (with confirmation)
+- Refresh the file list
+- Open the config folder directly from the UI
+- Search configs by name
+
+The **Aimbot** section also stores:
+- Mode (Toggle / Hold / Always)
+- Key selection via key-capture button
+- FOV, Hitbox mask, Hitbox priority, Smooth value
+- FOV visualize toggle + color
+- Visible check
+- Per-weapon aim groups (name + weapon list + full `AimSettings` snapshot) — see [Per-Weapon Config](#-per-weapon-config-weapon-groups)
+- Humanization master + all 6 sub-feature toggles and range sliders (including Reaction Delay Min/Max in ms)
+
+> ℹ️ Config files store all ESP elements, colors, flags, offscreen settings, display settings (VSync / tearing / fullscreen), safe-mode preference, safe-mode warning suppression, and streamproof state.
+
+---
+
+## 📁 Project Structure
+
+```
+Oblivion/
+├── Core/
+│   ├── Memory/           # NT syscall stubs, handle hijacking, PEB module walk
+│   └── Overlay/          # DComp + D3D11 + ImGui overlay, swapchain handling,
+│                         # UIAccess elevation for fullscreen mode
+├── SDK/
+│   ├── Entities/         # Cached controller/pawn scan + frame snapshot builder
+│   ├── Offsets/          # CS2 offsets
+│   └── Schemas/          # Schema dumps (client_dll, etc.)
+├── Features/
+│   ├── Combat/
+│   │   └── Aimbot/       # Mouse-delta aimbot via indirect NtUserSendInput,
+│   │                     # auto-calibration, humanization, per-weapon groups
+│   └── Visuals/
+│       └── Player/
+│           └── ESP/      # Box, Skeleton, Healthbar, Nametag, Distance,
+│                         # HeadCircle, Snapline, ViewDirection, Weapon,
+│                         # Flags, Offscreen
+├── UI/
+│   ├── Framework/        # Shared ImGui helpers, icon font, click sounds,
+│   │                     # flow-line pulse drawing
+│   ├── Header/           # Animated menu header (flow-line pulse, icon tabs,
+│   │                     # animated sub-tab strip)
+│   ├── Cards/            # Aimbot / Humanize / ESP / Config / System cards
+│   ├── Widgets/          # ESP card layout, dashed sliders, checkbox drawing
+│   ├── Animations/       # Boot animation (blur-in, text glow, fade-out)
+│   └── Stars/            # Multi-layer animated starfield background
+├── Utilities/
+│   ├── Config/           # INI config system + config browser + aim groups
+│   ├── Logging/          # Log rotation, crash handler (minidump + stack walk),
+│   │                     # latency sample buckets
+│   └── Maths/            # Vector math, WorldToScreen, angle calculations
+│       └── Vectors/      # Vector2, Vector3, ViewMatrix
+└── External/
+    ├── ImGUI/            # ImGui library
+    └── Xorstr/           # Compile-time string obfuscation
+```
+
+---
+
+## 🛡️ Safe Mode & Streamproof
+
+### Safe Mode
+
+**Safe Mode** is enabled by default. When active:
+- All memory writes are blocked (via `g_AllowMemoryWrite`)
+- ESP, overlay, and aimbot still function (aimbot uses mouse input, not memory writes)
+- Any future write-based features will be disabled
+
+To disable Safe Mode:
+1. Open the menu → **System** tab.
+2. Toggle **Safemode** off.
+3. Read the warning and confirm — or check **"Do not remind me again"** to disable the warning permanently (this preference is stored in the config).
+
+> ⚠️ Disabling Safe Mode allows the cheat to modify game memory. Use at your own risk.
+
+### Streamproof
+
+The **Streamproof** toggle (System tab) sets the overlay window's display affinity to `WDA_EXCLUDEFROMCAPTURE`, which hides it from OBS, Discord, Xbox Game Bar, and most screen capture APIs. If the OS rejects that flag it falls back to `WDA_MONITOR` (window appears as a black rectangle in captures).
+
+### Fullscreen Mode / UIAccess
+
+The **Fullscreen Mode** toggle attempts to elevate the cheat to the `UIAccess` integrity level by duplicating the token of `osk.exe` (On-Screen Keyboard). This allows the overlay to stay topmost over exclusive-fullscreen games without stealing focus. The current process relaunches itself with a `--ui-active` flag once the new token is acquired. If elevation fails, the cheat continues running at its current integrity level.
+
+---
+
+## 🧰 Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| Menu doesn't open | Run as Administrator, check `INSERT` key, run CS2 in fullscreen windowed |
+| ESP not showing | Make sure CS2 is running and you're in a match, run CS2 in fullscreen windowed |
+| Game crashes | Check `C:\Oblivion\Logs\` for the latest `.log` and `.dmp` — attach to a Discord report |
+| Overlay flickers | Disable fullscreen optimizations in CS2 properties, or toggle VSync / Allow Tearing |
+| Config not saving | Check folder permissions for `C:\Oblivion\Configurations` |
+| Aimbot overshoots / undershoots | Adjust Smooth value, or let auto-calibration re-learn by moving the mouse a few times; tune Humanization Overshoot/Undershoot ranges |
+| Aimbot feels sluggish on first target | Reduce **Reaction Delay** min/max in the Humanization card |
+| Aimbot uses the wrong settings for a weapon | Open the **Group** expander in the Aimbot card and check which group holds that weapon; if none, it falls back to **Shared** |
+| Menu doesn't respond to input | Make sure overlay is interactive (it is while the menu is open) |
+| Overlay disappears in OBS | Enable **Streamproof** in the System tab |
+| Overlay won't stay on top of fullscreen game | Enable **Fullscreen Mode** in the System tab (requires Admin) |
+| Cheat closes on its own | Look for `cs2.exe exited` in the log — the cheat monitors the game process and shuts down when it closes |
+
+> Still stuck? **Join the Discord** for instant support.
+
+---
+
+## ❓ FAQ
+
+**Q: Is this detected?**
+A: We cannot guarantee safety, but currently it's undetected. Always use at your own risk. Safe Mode reduces risk.
+
+**Q: Does it work on Faceit / ESEA?**
+A: No. This is for official CS2 servers only.
+
+**Q: Do I need to inject?**
+A: No. It's fully external — a transparent DirectComposition overlay + external memory reads.
+
+**Q: How do I get the cheat?**
+A: Join our Discord → [https://discord.gg/DQXRjR6FhW](https://discord.gg/DQXRjR6FhW) and head to the **#downloads** channel — the instructions are posted there.
+
+**Q: Is it free?**
+A: Yes, Oblivion is completely free.
+
+**Q: Is bunnyhop included?**
+A: No. A `Bunnyhop.cpp` stub exists in the tree, but it targets an older framework (`g_Config`, legacy offsets) and is **not compiled or called** by the current build. The active build focuses on ESP, aimbot, and humanization.
+
+**Q: Why are some tabs empty?**
+A: Triggerbot, Recoil, Local ESP, World ESP, and the Settings tab are UI placeholders reserved for future features.
+
+**Q: What's the difference between Safe Mode and Streamproof?**
+A: **Safe Mode** blocks memory writes. **Streamproof** hides the overlay from screen captures. They are independent and can be combined.
+
+**Q: What does Fullscreen Mode do?**
+A: It relaunches the cheat with a duplicated `UIAccess` token from `osk.exe` so the overlay can render on top of exclusive-fullscreen games without stealing focus.
+
+**Q: What is Humanization for?**
+A: It makes the aimbot's mouse movement look less robotic by randomizing smoothing, adding jitter, applying configurable overshoot/undershoot percentages, curving the aim path, and delaying the initial engage by a random per-target reaction time. Each component has its own toggle and range sliders, plus a master enable.
+
+**Q: How does auto-calibration work?**
+A: Every time the aimbot sends a mouse delta, the cheat records the view angles before the send. On the next tick it compares them to the new angles to learn the current degrees-per-pixel ratio. The ratio is blended into a running estimate (fast warm-up for the first 10 samples, then a slower 15% blend), and clamped to a sane range. This adapts automatically if you change your in-game sensitivity.
+
+**Q: What's "Hitbox Priority"?**
+A: It penalizes hitboxes the aimbot should avoid when selecting a target point. `Head Priority` adds a penalty to non-head bones; `Body Priority` adds a penalty to head/neck bones. `Closest` applies no penalties and simply picks the bone whose angle is closest to your view.
+
+**Q: How do I set different aimbot settings for different weapons?**
+A: Use **Weapon Groups**. In the **Aimbot** tab, click the **Group** expander to create/select a profile, then use the **Weapons** expander to assign weapons to it. All Aimbot + Humanization controls then apply to that profile. See [Per-Weapon Config](#-per-weapon-config-weapon-groups) for a full walkthrough.
+
+**Q: What happens if my current weapon isn't in any group?**
+A: The aimbot falls back to the **Shared** profile. So you always need a valid config for weapons you haven't explicitly grouped — tune Shared to a sane default.
+
+---
+
+## ⚠️ Disclaimer
+
+This project is for **educational purposes only**.
+The developers are **not responsible** for any bans, account suspensions, or damages caused by using this software.
+Cheating in online games violates the Terms of Service of Valve and Steam.
+**Use at your own risk.**
+
+---
+
+## 💬 Join the Community
+
+<p align="center">
+  <a href="https://discord.gg/DQXRjR6FhW">
+    <img src="https://img.shields.io/badge/Discord-Join%20Now-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord">
+  </a>
+</p>
+
+**Why join?**
+- ✅ Download the latest cheat build
+- ✅ Get help with setup and troubleshooting
+- ✅ Request features and report bugs
+- ✅ Stay updated with new releases
+- ✅ Connect with other users
+
+> 🔗 **Discord Invite:** [https://discord.gg/DQXRjR6FhW](https://discord.gg/DQXRjR6FhW)
+
+---
+
+<p align="center">
+  <strong>Oblivion</strong> — Elevate your CS2 experience.
+</p>
+
+<p align="center">
+  Made with ❤️ by the Oblivion Team
+</p>
+```
