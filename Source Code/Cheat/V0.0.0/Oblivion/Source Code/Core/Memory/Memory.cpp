@@ -7,6 +7,7 @@
 #include <cwctype>
 #include <securitybaseapi.h>
 #include <shellapi.h>
+#include <mutex>
 
 #pragma comment(lib, "ntdll.lib")
 #pragma comment(lib, "shell32.lib")
@@ -17,15 +18,29 @@ uintptr_t g_spoofRets[3] = { 0, 0, 0 };
 
 static uintptr_t g_ntdllBase = 0;
 static uintptr_t g_syscallGadget = 0;
-static uint8_t* g_stubPage = nullptr;
-static size_t    g_stubOffset = 0;
 
-static constexpr uint64_t kCompileSeed = []() constexpr {
-    uint64_t h = 0xcbf29ce484222325ull;
-    const char* s = __TIME__ __DATE__;
-    for (int i = 0; s[i]; ++i) { h ^= static_cast<uint8_t>(s[i]); h *= 0x100000001b3ull; }
-    return h;
-    }();
+enum StubId : int {
+    StubNtReadVirtualMemory = 0,
+    StubNtWriteVirtualMemory,
+    StubNtOpenProcess,
+    StubNtDuplicateObject,
+    StubNtQuerySystemInformation,
+    StubNtQueryInformationProcess,
+    StubCount
+};
+
+static const struct { const char* name; int nArgs; } kStubs[StubCount] = {
+    { "NtReadVirtualMemory", 5 },
+    { "NtWriteVirtualMemory", 5 },
+    { "NtOpenProcess", 4 },
+    { "NtDuplicateObject", 7 },
+    { "NtQuerySystemInformation", 4 },
+    { "NtQueryInformationProcess", 5 },
+};
+
+static void* g_stubs[StubCount] = {};
+static std::once_flag g_engineOnce;
+static std::atomic<bool> g_engineOk{ false };
 
 static bool SafeMemcpy(uintptr_t src, void* dst, size_t size) {
     __try {
@@ -78,8 +93,11 @@ static uintptr_t FindExportByName(uintptr_t moduleBase, const char* name) {
 static uint32_t ExtractSSNFromStub(uintptr_t addr) {
     BYTE buf[8]{};
     if (!SafeMemcpy(addr, buf, sizeof(buf))) return 0;
-    if (buf[0] == 0x4C && buf[1] == 0x8B && buf[2] == 0xD1 && buf[3] == 0xB8)
-        return *reinterpret_cast<uint32_t*>(buf + 4);
+    if (buf[0] == 0x4C && buf[1] == 0x8B && buf[2] == 0xD1 && buf[3] == 0xB8) {
+        uint32_t ssn = 0;
+        memcpy(&ssn, buf + 4, 4);
+        return ssn;
+    }
     return 0;
 }
 
@@ -89,17 +107,6 @@ static uintptr_t ExtractGadgetFromStub(uintptr_t addr) {
     for (int i = 0; i + 2 < static_cast<int>(sizeof(buf)); ++i) {
         if (buf[i] == 0x0F && buf[i + 1] == 0x05 && buf[i + 2] == 0xC3)
             return addr + i;
-    }
-    return 0;
-}
-
-static uint32_t ResolveSSN(uintptr_t funcAddr) {
-    uint32_t ssn = ExtractSSNFromStub(funcAddr);
-    if (ssn) return ssn;
-    for (int i = 1; i <= 64; ++i) {
-        uintptr_t neighbor = funcAddr - static_cast<uintptr_t>(i) * 32;
-        uint32_t nb = ExtractSSNFromStub(neighbor);
-        if (nb) return nb + static_cast<uint32_t>(i);
     }
     return 0;
 }
@@ -119,8 +126,8 @@ static uintptr_t FindRetInText(uintptr_t moduleBase) {
         std::vector<uint8_t> buf(size);
         if (!SafeMemcpy(start, buf.data(), size)) return 0;
         std::vector<SIZE_T> hits;
-        for (SIZE_T j = 0; j + 2 < size; ++j) {
-            if (buf[j] == 0xC3 && buf[j + 1] != 0xCC && buf[j + 1] != 0xC3)
+        for (SIZE_T j = 5; j < size; ++j) {
+            if (buf[j] == 0xC3 && buf[j - 5] == 0xE8)
                 hits.push_back(j);
         }
         if (hits.empty()) return 0;
@@ -131,7 +138,7 @@ static uintptr_t FindRetInText(uintptr_t moduleBase) {
 }
 
 static void InitSpoofRets() {
-    if (g_spoofRets[0] && g_spoofRets[1] && g_spoofRets[2]) return;
+    if (g_spoofRets[0]) return;
     HMODULE mods[3] = {
         GetModuleHandleA(xorstr_("kernel32.dll")),
         GetModuleHandleA(xorstr_("ntdll.dll")),
@@ -146,10 +153,56 @@ static void InitSpoofRets() {
     if (!g_spoofRets[2]) g_spoofRets[2] = g_spoofRets[0];
 }
 
-static bool InitSyscallEngine() {
-    if (g_syscallGadget) return true;
+static void* BuildStubAt(uint8_t* buf, SIZE_T offset, uint32_t ssn, int nArgs,
+    uintptr_t gadget, uintptr_t spoofRet) {
+    int nStackArgs = (nArgs > 4) ? (nArgs - 4) : 0;
+    if (nStackArgs > 3) nStackArgs = 3;
+
+    uint8_t* s = buf + offset;
+    memset(s, 0xCC, 128);
+
+    SIZE_T pushBytes = 6;
+    SIZE_T copyBytes = static_cast<SIZE_T>(nStackArgs) * 16;
+    SIZE_T totalCode = pushBytes + copyBytes + 3 + 5 + 6;
+    SIZE_T dataStart = ((totalCode + 7) / 8) * 8;
+
+    SIZE_T o = 0;
+
+    SIZE_T pos = o;
+    s[o++] = 0xFF; s[o++] = 0x35;
+    int32_t disp = static_cast<int32_t>((dataStart + 8) - (pos + 6));
+    memcpy(s + o, &disp, 4); o += 4;
+
+    for (int a = 0; a < nStackArgs; ++a) {
+        int32_t srcDisp = static_cast<int32_t>(0x28 + 8 + a * 8);
+        int32_t dstDisp = static_cast<int32_t>(0x28 + a * 8);
+        s[o++] = 0x48; s[o++] = 0x8B; s[o++] = 0x84; s[o++] = 0x24;
+        memcpy(s + o, &srcDisp, 4); o += 4;
+        s[o++] = 0x48; s[o++] = 0x89; s[o++] = 0x84; s[o++] = 0x24;
+        memcpy(s + o, &dstDisp, 4); o += 4;
+    }
+
+    s[o++] = 0x4C; s[o++] = 0x8B; s[o++] = 0xD1;
+    s[o++] = 0xB8;
+    memcpy(s + o, &ssn, 4); o += 4;
+
+    SIZE_T jmpPos = o;
+    s[o++] = 0xFF; s[o++] = 0x25;
+    int32_t jmpDisp = static_cast<int32_t>(dataStart - (jmpPos + 6));
+    memcpy(s + o, &jmpDisp, 4); o += 4;
+
+    while (o < dataStart) s[o++] = 0xCC;
+
+    memcpy(s + dataStart, &gadget, 8);
+    memcpy(s + dataStart + 8, &spoofRet, 8);
+
+    return s;
+}
+
+static void DoInit() {
     uintptr_t ntdll = GetNtdllBase();
-    if (!ntdll) return false;
+    if (!ntdll) return;
+
     const char* probes[] = {
         "NtReadVirtualMemory", "NtWriteVirtualMemory", "NtOpenProcess",
         "NtClose", "NtQuerySystemInformation", "NtAllocateVirtualMemory",
@@ -161,89 +214,42 @@ static bool InitSyscallEngine() {
         uintptr_t gadget = ExtractGadgetFromStub(fn);
         if (gadget) { g_syscallGadget = gadget; break; }
     }
-    if (!g_syscallGadget) return false;
-    g_stubPage = static_cast<uint8_t*>(
-        VirtualAlloc(nullptr, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
-    if (!g_stubPage) return false;
-    InitSpoofRets();
-    return true;
-}
-
-static void* BuildStub(uint32_t ssn, int nArgs) {
-    if (!g_stubPage || !g_syscallGadget) return nullptr;
-    if (g_stubOffset + 128 > 0x1000) return nullptr;
+    if (!g_syscallGadget) return;
 
     InitSpoofRets();
+    if (!g_spoofRets[0]) return;
 
-    int nFrames = 0;
-    if (g_spoofRets[0]) nFrames++;
-    if (g_spoofRets[1] && nFrames >= 1) nFrames++;
-    if (g_spoofRets[2] && nFrames >= 2) nFrames++;
-    if (nFrames < 1) nFrames = 1;
+    uint8_t* buf = static_cast<uint8_t*>(
+        VirtualAlloc(nullptr, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+    if (!buf) return;
 
-    int nStackArgs = (nArgs > 4) ? (nArgs - 4) : 0;
-    if (nStackArgs > 3) nStackArgs = 3;
-
-    uint8_t* s = g_stubPage + g_stubOffset;
-    memset(s, 0xCC, 128);
-
-    SIZE_T pushBytes = static_cast<SIZE_T>(nFrames) * 6;
-    SIZE_T copyCodeSize = static_cast<SIZE_T>(nStackArgs) * 16;
-    SIZE_T totalCodeSize = pushBytes + copyCodeSize + 3 + 5 + 6;
-    SIZE_T dataStart = ((totalCodeSize + 7) / 8) * 8;
-
-    SIZE_T o = 0;
-    for (int i = nFrames - 1; i >= 0; --i) {
-        SIZE_T pos = o;
-        s[o++] = 0xFF; s[o++] = 0x35;
-        int32_t disp = static_cast<int32_t>((dataStart + 8 + static_cast<SIZE_T>(i) * 8) - (pos + 6));
-        *reinterpret_cast<int32_t*>(s + o) = disp;
-        o += 4;
+    bool anyBuilt = false;
+    for (int i = 0; i < StubCount; ++i) {
+        uintptr_t fn = FindExportByName(ntdll, kStubs[i].name);
+        if (!fn) continue;
+        uint32_t ssn = ExtractSSNFromStub(fn);
+        if (!ssn) continue;
+        g_stubs[i] = BuildStubAt(buf, static_cast<SIZE_T>(i) * 128, ssn, kStubs[i].nArgs,
+            g_syscallGadget, g_spoofRets[0]);
+        anyBuilt = true;
     }
 
-    for (int a = 0; a < nStackArgs; ++a) {
-        int32_t srcDisp = static_cast<int32_t>(0x28 + nFrames * 8 + a * 8);
-        int32_t dstDisp = static_cast<int32_t>(0x28 + a * 8);
-        s[o++] = 0x48; s[o++] = 0x8B; s[o++] = 0x84; s[o++] = 0x24;
-        *reinterpret_cast<int32_t*>(s + o) = srcDisp; o += 4;
-        s[o++] = 0x48; s[o++] = 0x89; s[o++] = 0x84; s[o++] = 0x24;
-        *reinterpret_cast<int32_t*>(s + o) = dstDisp; o += 4;
-    }
+    DWORD old = 0;
+    VirtualProtect(buf, 0x1000, PAGE_EXECUTE_READ, &old);
 
-    s[o++] = 0x4C; s[o++] = 0x8B; s[o++] = 0xD1;
-    s[o++] = 0xB8;
-    *reinterpret_cast<uint32_t*>(s + o) = ssn;
-    o += 4;
-    SIZE_T jmpPos = o;
-    s[o++] = 0xFF; s[o++] = 0x25;
-    int32_t jmpDisp = static_cast<int32_t>(dataStart - (jmpPos + 6));
-    *reinterpret_cast<int32_t*>(s + o) = jmpDisp;
-    o += 4;
-
-    while (o < dataStart) s[o++] = 0xCC;
-
-    *reinterpret_cast<uintptr_t*>(s + dataStart + 0) = g_syscallGadget;
-    for (int i = 0; i < nFrames; ++i)
-        *reinterpret_cast<uintptr_t*>(s + dataStart + 8 + static_cast<SIZE_T>(i) * 8) = g_spoofRets[i];
-
-    void* result = s;
-    g_stubOffset += 128;
-    return result;
+    if (anyBuilt)
+        g_engineOk.store(true, std::memory_order_release);
 }
 
-static void* BuildStubFor(const char* name, int nArgs) {
-    if (!InitSyscallEngine()) return nullptr;
-    uintptr_t fn = FindExportByName(GetNtdllBase(), name);
-    if (!fn) return nullptr;
-    uint32_t ssn = ResolveSSN(fn);
-    if (!ssn) return nullptr;
-    return BuildStub(ssn, nArgs);
+static bool InitSyscallEngine() {
+    std::call_once(g_engineOnce, DoInit);
+    return g_engineOk.load(std::memory_order_acquire);
 }
 
 pNtReadVirtualMemory_t GetNtReadVirtualMemory() {
     static pNtReadVirtualMemory_t fn = []() -> pNtReadVirtualMemory_t {
-        void* stub = BuildStubFor(xorstr_("NtReadVirtualMemory"), 5);
-        if (stub) return reinterpret_cast<pNtReadVirtualMemory_t>(stub);
+        if (InitSyscallEngine() && g_stubs[StubNtReadVirtualMemory])
+            return reinterpret_cast<pNtReadVirtualMemory_t>(g_stubs[StubNtReadVirtualMemory]);
         HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
         return reinterpret_cast<pNtReadVirtualMemory_t>(GetProcAddress(ntdll, xorstr_("NtReadVirtualMemory")));
         }();
@@ -252,8 +258,8 @@ pNtReadVirtualMemory_t GetNtReadVirtualMemory() {
 
 pNtWriteVirtualMemory_t GetNtWriteVirtualMemory() {
     static pNtWriteVirtualMemory_t fn = []() -> pNtWriteVirtualMemory_t {
-        void* stub = BuildStubFor(xorstr_("NtWriteVirtualMemory"), 5);
-        if (stub) return reinterpret_cast<pNtWriteVirtualMemory_t>(stub);
+        if (InitSyscallEngine() && g_stubs[StubNtWriteVirtualMemory])
+            return reinterpret_cast<pNtWriteVirtualMemory_t>(g_stubs[StubNtWriteVirtualMemory]);
         HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
         return reinterpret_cast<pNtWriteVirtualMemory_t>(GetProcAddress(ntdll, xorstr_("NtWriteVirtualMemory")));
         }();
@@ -262,8 +268,8 @@ pNtWriteVirtualMemory_t GetNtWriteVirtualMemory() {
 
 pNtOpenProcess_t GetNtOpenProcess() {
     static pNtOpenProcess_t fn = []() -> pNtOpenProcess_t {
-        void* stub = BuildStubFor(xorstr_("NtOpenProcess"), 4);
-        if (stub) return reinterpret_cast<pNtOpenProcess_t>(stub);
+        if (InitSyscallEngine() && g_stubs[StubNtOpenProcess])
+            return reinterpret_cast<pNtOpenProcess_t>(g_stubs[StubNtOpenProcess]);
         HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
         return reinterpret_cast<pNtOpenProcess_t>(GetProcAddress(ntdll, xorstr_("NtOpenProcess")));
         }();
@@ -272,8 +278,8 @@ pNtOpenProcess_t GetNtOpenProcess() {
 
 static pNtDuplicateObject_t GetNtDuplicateObject() {
     static pNtDuplicateObject_t fn = []() -> pNtDuplicateObject_t {
-        void* stub = BuildStubFor(xorstr_("NtDuplicateObject"), 7);
-        if (stub) return reinterpret_cast<pNtDuplicateObject_t>(stub);
+        if (InitSyscallEngine() && g_stubs[StubNtDuplicateObject])
+            return reinterpret_cast<pNtDuplicateObject_t>(g_stubs[StubNtDuplicateObject]);
         HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
         return reinterpret_cast<pNtDuplicateObject_t>(GetProcAddress(ntdll, xorstr_("NtDuplicateObject")));
         }();
@@ -282,8 +288,8 @@ static pNtDuplicateObject_t GetNtDuplicateObject() {
 
 static pNtQuerySystemInformation_t GetNtQuerySystemInformation() {
     static pNtQuerySystemInformation_t fn = []() -> pNtQuerySystemInformation_t {
-        void* stub = BuildStubFor(xorstr_("NtQuerySystemInformation"), 4);
-        if (stub) return reinterpret_cast<pNtQuerySystemInformation_t>(stub);
+        if (InitSyscallEngine() && g_stubs[StubNtQuerySystemInformation])
+            return reinterpret_cast<pNtQuerySystemInformation_t>(g_stubs[StubNtQuerySystemInformation]);
         HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
         return reinterpret_cast<pNtQuerySystemInformation_t>(GetProcAddress(ntdll, xorstr_("NtQuerySystemInformation")));
         }();
@@ -294,8 +300,8 @@ typedef NTSTATUS(NTAPI* pNtQueryInformationProcess_t)(HANDLE, PROCESSINFOCLASS, 
 
 static pNtQueryInformationProcess_t GetNtQueryInformationProcess() {
     static pNtQueryInformationProcess_t fn = []() -> pNtQueryInformationProcess_t {
-        void* stub = BuildStubFor(xorstr_("NtQueryInformationProcess"), 5);
-        if (stub) return reinterpret_cast<pNtQueryInformationProcess_t>(stub);
+        if (InitSyscallEngine() && g_stubs[StubNtQueryInformationProcess])
+            return reinterpret_cast<pNtQueryInformationProcess_t>(g_stubs[StubNtQueryInformationProcess]);
         HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll.dll"));
         return reinterpret_cast<pNtQueryInformationProcess_t>(GetProcAddress(ntdll, xorstr_("NtQueryInformationProcess")));
         }();
@@ -426,7 +432,7 @@ bool Memory::IsTrustedSourceProcess(DWORD pid) {
 static bool IsHandleAlive(HANDLE h) {
     if (!h) return false;
     DWORD code = 0;
-    if (!GetExitCodeProcess(h, &code) && GetLastError() != ERROR_INVALID_HANDLE) return true;
+    if (!GetExitCodeProcess(h, &code)) return false;
     return code == STILL_ACTIVE;
 }
 
@@ -554,10 +560,11 @@ uintptr_t Memory::GetModuleBase(const wchar_t* moduleName) const {
         if (!ReadRemoteBuffer(handle, entryBase, &entry, sizeof(entry))) break;
         if (entry.BaseDllName.Buffer && entry.BaseDllName.Length > 0) {
             WCHAR nameBuffer[MAX_PATH]{};
-            SIZE_T nameSize = (std::min)(
-                (SIZE_T)entry.BaseDllName.Length,
-                (SIZE_T)(MAX_PATH - 1) * sizeof(WCHAR));
-            if (ReadRemoteBuffer(handle, (uintptr_t)entry.BaseDllName.Buffer, nameBuffer, nameSize)) {
+            SIZE_T maxBytes = (SIZE_T)(MAX_PATH - 1) * sizeof(WCHAR);
+            SIZE_T nameSize = entry.BaseDllName.Length;
+            if (nameSize > maxBytes) nameSize = maxBytes;
+            if ((nameSize & 1) != 0) nameSize--;
+            if (nameSize > 0 && ReadRemoteBuffer(handle, (uintptr_t)entry.BaseDllName.Buffer, nameBuffer, nameSize)) {
                 if (_wcsicmp(nameBuffer, moduleName) == 0)
                     return (uintptr_t)entry.DllBase;
             }

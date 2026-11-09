@@ -32,12 +32,28 @@ namespace {
         char      cachedWeaponName[32] = {};
         char      name[128] = {};
         bool      nameValid = false;
+
+        uintptr_t weaponEnt = 0;
+        uint32_t  weaponHandle = 0;
+        double    lastWeaponPoll = 0.0;
+        bool      weaponValid = false;
+        bool      weaponIsReloading = false;
+        int32_t   weaponAmmo = 0;
+        int32_t   weaponReserve = 0;
+
+        int32_t   lastMoney = 0;
+        int32_t   lastPing = 0;
+        uint8_t   lastArmor = 0;
+        bool      lastHelmet = false;
+        double    lastSlowPoll = 0.0;
     };
 
     constexpr int       kMaxPlayers = 64;
     constexpr uintptr_t kSlotStride = 0x70;
     constexpr double    kRescanIntervalSec = 0.5;
-    constexpr double    kC4CacheSec = 0.5;
+    constexpr double    kC4CacheSec = 1.0;
+    constexpr double    kWeaponPollSec = 0.033;
+    constexpr double    kSlowPollSec = 0.05;
 
     constexpr uint8_t kTeamT = 2;
     constexpr uint8_t kTeamCT = 3;
@@ -130,59 +146,6 @@ namespace {
             listEntry + kSlotStride * static_cast<uintptr_t>(handle & 0x1FF));
     }
 
-    struct WeaponInfo {
-        char     name[32] = {};
-        bool     isReloading = false;
-        int32_t  ammo = 0;
-        int32_t  reserve = 0;
-    };
-
-    struct WeaponReadNeeds {
-        bool name = false;
-        bool reload = false;
-        bool ammo = false;
-    };
-
-    void ReadWeaponInfo(uintptr_t pawn, uintptr_t entityList, CachedPlayer& slot,
-        const WeaponReadNeeds& needs, WeaponInfo& out) {
-        if (!pawn) return;
-        if (!needs.name && !needs.reload && !needs.ammo) return;
-        using namespace cs2_dumper::schemas::client_dll;
-
-        const uintptr_t weaponServices = mem.Read<uintptr_t>(
-            pawn + C_BasePlayerPawn::m_pWeaponServices);
-        if (!weaponServices) return;
-
-        const uint32_t handle = mem.Read<uint32_t>(
-            weaponServices + CPlayer_WeaponServices::m_hActiveWeapon);
-        if (!handle || handle == 0xFFFFFFFF) return;
-
-        const uintptr_t weapon = ResolveEntityFromHandle(entityList, handle);
-        if (!weapon) return;
-
-        if (needs.name) {
-            const uintptr_t attrMgr = weapon + C_EconEntity::m_AttributeManager;
-            const uintptr_t econItem = attrMgr + C_AttributeContainer::m_Item;
-            const int defIndex = mem.Read<uint16_t>(econItem + C_EconItemView::m_iItemDefinitionIndex);
-            if (defIndex <= 0) return;
-
-            if (static_cast<uint16_t>(defIndex) != slot.lastDefIndex) {
-                const char* wname = WeaponNameById(defIndex);
-                if (wname) strncpy_s(slot.cachedWeaponName, sizeof(slot.cachedWeaponName), wname, _TRUNCATE);
-                else snprintf(slot.cachedWeaponName, sizeof(slot.cachedWeaponName), "Weapon #%d", defIndex);
-                slot.lastDefIndex = static_cast<uint16_t>(defIndex);
-            }
-            strncpy_s(out.name, sizeof(out.name), slot.cachedWeaponName, _TRUNCATE);
-        }
-
-        if (needs.reload)
-            out.isReloading = mem.Read<bool>(weapon + C_CSWeaponBase::m_bInReload);
-        if (needs.ammo) {
-            out.ammo = mem.Read<int32_t>(weapon + C_BasePlayerWeapon::m_iClip1);
-            out.reserve = mem.Read<int32_t>(weapon + C_BasePlayerWeapon::m_pReserveAmmo);
-        }
-    }
-
     bool FindC4OnPlayer(uintptr_t pawn, uintptr_t entityList, uintptr_t& c4Out) {
         c4Out = 0;
         if (!pawn) return false;
@@ -266,6 +229,18 @@ namespace {
                         std::memcpy(dst.name, g_cache[j].name, sizeof(dst.name));
                         dst.nameValid = true;
                     }
+                    dst.weaponEnt = g_cache[j].weaponEnt;
+                    dst.weaponHandle = g_cache[j].weaponHandle;
+                    dst.lastWeaponPoll = g_cache[j].lastWeaponPoll;
+                    dst.weaponValid = g_cache[j].weaponValid;
+                    dst.weaponIsReloading = g_cache[j].weaponIsReloading;
+                    dst.weaponAmmo = g_cache[j].weaponAmmo;
+                    dst.weaponReserve = g_cache[j].weaponReserve;
+                    dst.lastMoney = g_cache[j].lastMoney;
+                    dst.lastPing = g_cache[j].lastPing;
+                    dst.lastArmor = g_cache[j].lastArmor;
+                    dst.lastHelmet = g_cache[j].lastHelmet;
+                    dst.lastSlowPoll = g_cache[j].lastSlowPoll;
                     break;
                 }
             }
@@ -274,10 +249,6 @@ namespace {
         std::memcpy(g_cache, newCache, sizeof(CachedPlayer) * newCount);
         g_cacheCount = newCount;
         g_lastRescan = FrameTime();
-    }
-
-    uintptr_t ResolvePawn(uintptr_t entityList, uint32_t handle) {
-        return ResolveEntityFromHandle(entityList, handle);
     }
 }
 
@@ -331,34 +302,40 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
     mem.ReadRaw(mem.client + cs2_dumper::offsets::client_dll::dwViewMatrix,
         &frame.viewMatrix, sizeof(ViewMatrix));
 
-    const size_t kTeamOff = C_BaseEntity::m_iTeamNum;
-    const size_t kLifeOff = C_BaseEntity::m_lifeState;
-    const size_t kSceneOff = C_BaseEntity::m_pGameSceneNode;
-    const size_t kHealthOff = C_BaseEntity::m_iHealth;
-    const size_t kBodyCompOff = C_BaseEntity::m_CBodyComponent;
-    const size_t kVelocityOff = C_BaseEntity::m_vecAbsVelocity;
-    const size_t kSceneNodeOff = CBodyComponent::m_pSceneNode;
-    const size_t kModelStateOff = CSkeletonInstance::m_modelState;
-    const size_t kCtrlHandleOff = CCSPlayerController::m_hPlayerPawn;
+    size_t bMin = SIZE_MAX, bMax = 0;
+    auto add = [&](size_t o, size_t s) {
+        if (o < bMin) bMin = o;
+        if (o + s > bMax) bMax = o + s;
+        };
+    add(C_BaseEntity::m_CBodyComponent, 8);
+    add(C_BaseEntity::m_iTeamNum, 1);
+    add(C_BaseEntity::m_lifeState, 1);
+    add(C_BaseEntity::m_pGameSceneNode, 8);
+    add(C_BaseEntity::m_iHealth, 4);
+    add(C_BaseEntity::m_vecAbsVelocity, 12);
+    add(C_BasePlayerPawn::m_pWeaponServices, 8);
+    add(C_BasePlayerPawn::m_pItemServices, 8);
+    add(C_CSPlayerPawn::m_angEyeAngles, 8);
+    add(C_CSPlayerPawn::m_bIsScoped, 1);
+    add(C_CSPlayerPawn::m_bIsDefusing, 1);
+    add(C_CSPlayerPawnBase::m_flFlashDuration, 4);
+    add(C_CSPlayerPawn::m_ArmorValue, 4);
 
-    constexpr size_t kBoneArrayOff = 0x80;
+    const size_t span = bMax - bMin;
+    constexpr size_t kBuf = 0x4000;
+    uint8_t pawnBuf[kBuf];
+
+    const size_t sDormantOff = CGameSceneNode::m_bDormant;
+    const size_t sOriginOff = CGameSceneNode::m_vecAbsOrigin;
+    const size_t sMin = (std::min)(sDormantOff, sOriginOff);
+    const size_t sMax = (std::max)(sDormantOff + 1, sOriginOff + 12);
+    const size_t sSpan = sMax - sMin;
+    uint8_t sceneBuf[0x100];
+
     constexpr size_t kBoneStride = 32;
-
-    const size_t kMinPawnOff = (std::min)({ kTeamOff, kLifeOff, kSceneOff, kHealthOff, kBodyCompOff, kVelocityOff });
-    const size_t kMaxPawnEnd = (std::max)({ kTeamOff + 1, kLifeOff + 1,
-                                            kSceneOff + 8, kHealthOff + 4, kBodyCompOff + 8, kVelocityOff + 12 });
-    const size_t kPawnSpan = kMaxPawnEnd - kMinPawnOff;
-
-    const size_t kDormantOff = CGameSceneNode::m_bDormant;
-    const size_t kOriginOff = CGameSceneNode::m_vecAbsOrigin;
-    const size_t kMinSceneOff = (std::min)(kDormantOff, kOriginOff);
-    const size_t kMaxSceneEnd = (std::max)(kDormantOff + 1, kOriginOff + 12);
-    const size_t kSceneSpan = kMaxSceneEnd - kMinSceneOff;
-
-    constexpr size_t kBufSize = 0x2000;
-    uint8_t pawnBuf[kBufSize];
-    uint8_t sceneBuf[kBufSize];
     alignas(16) uint8_t boneBuf[kBoneCount * kBoneStride];
+
+    const size_t kCtrlHandleOff = CCSPlayerController::m_hPlayerPawn;
 
     const double now = FrameTime();
     if (entityList != g_cachedEntityList || g_cacheCount == 0 ||
@@ -373,30 +350,25 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
 
         const uint32_t pawnHandle = mem.Read<uint32_t>(slot.controller + kCtrlHandleOff);
         if (!pawnHandle) {
-            slot.pawn = 0;
-            slot.pawnHandle = 0;
-            slot.bodyComp = 0;
-            slot.cachedC4 = 0;
-            slot.lastC4Check = 0.0;
-            slot.lastDefIndex = 0;
-            slot.cachedWeaponName[0] = '\0';
+            slot.pawn = 0; slot.pawnHandle = 0; slot.bodyComp = 0;
+            slot.cachedC4 = 0; slot.lastC4Check = 0.0;
+            slot.lastDefIndex = 0; slot.cachedWeaponName[0] = '\0';
             slot.nameValid = false;
+            slot.weaponEnt = 0; slot.weaponHandle = 0; slot.weaponValid = false;
             continue;
         }
 
         if (slot.pawnHandle != pawnHandle) {
-            slot.pawn = ResolvePawn(entityList, pawnHandle);
+            slot.pawn = ResolveEntityFromHandle(entityList, pawnHandle);
             slot.pawnHandle = pawnHandle;
-            slot.bodyComp = 0;
-            slot.cachedC4 = 0;
-            slot.lastC4Check = 0.0;
-            slot.lastDefIndex = 0;
-            slot.cachedWeaponName[0] = '\0';
+            slot.bodyComp = 0; slot.cachedC4 = 0; slot.lastC4Check = 0.0;
+            slot.lastDefIndex = 0; slot.cachedWeaponName[0] = '\0';
             slot.nameValid = false;
+            slot.weaponEnt = 0; slot.weaponHandle = 0; slot.weaponValid = false;
             if (!slot.pawn) continue;
         }
         else if (slot.pawn == 0) {
-            slot.pawn = ResolvePawn(entityList, pawnHandle);
+            slot.pawn = ResolveEntityFromHandle(entityList, pawnHandle);
             if (!slot.pawn) continue;
         }
 
@@ -410,41 +382,70 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
             continue;
         }
 
+        const bool batchOk = (span <= kBuf) &&
+            mem.ReadRaw(pawn + bMin, pawnBuf, span);
+
+        auto rd8 = [&](size_t o) -> uint8_t {
+            uint8_t v = 0;
+            if (batchOk && o >= bMin && o + 1 <= bMax) v = pawnBuf[o - bMin];
+            else mem.ReadRaw(pawn + o, &v, 1);
+            return v;
+            };
+        auto rd16 = [&](size_t o) -> uint16_t {
+            uint16_t v = 0;
+            if (batchOk && o >= bMin && o + 2 <= bMax) memcpy(&v, pawnBuf + (o - bMin), 2);
+            else mem.ReadRaw(pawn + o, &v, 2);
+            return v;
+            };
+        auto rd32 = [&](size_t o) -> int32_t {
+            int32_t v = 0;
+            if (batchOk && o >= bMin && o + 4 <= bMax) memcpy(&v, pawnBuf + (o - bMin), 4);
+            else mem.ReadRaw(pawn + o, &v, 4);
+            return v;
+            };
+        auto rd64 = [&](size_t o) -> uint64_t {
+            uint64_t v = 0;
+            if (batchOk && o >= bMin && o + 8 <= bMax) memcpy(&v, pawnBuf + (o - bMin), 8);
+            else mem.ReadRaw(pawn + o, &v, 8);
+            return v;
+            };
+        auto rdf = [&](size_t o) -> float {
+            float v = 0.0f;
+            if (batchOk && o >= bMin && o + 4 <= bMax) memcpy(&v, pawnBuf + (o - bMin), 4);
+            else mem.ReadRaw(pawn + o, &v, 4);
+            return v;
+            };
+        auto rdVec3 = [&](size_t o, Vector3& out) {
+            if (batchOk && o >= bMin && o + 12 <= bMax) memcpy(&out, pawnBuf + (o - bMin), 12);
+            else mem.ReadRaw(pawn + o, &out, 12);
+            };
+
         FrameEntity entity{};
         entity.address = pawn;
-        uintptr_t sceneNode = 0;
-        uintptr_t bodyComp = 0;
 
-        if (mem.ReadRaw(pawn + kMinPawnOff, pawnBuf, kPawnSpan)) {
-            entity.team = pawnBuf[kTeamOff - kMinPawnOff];
-            entity.isAlive = (pawnBuf[kLifeOff - kMinPawnOff] == 0);
-            int32_t hp = 0;
-            std::memcpy(&hp, pawnBuf + (kHealthOff - kMinPawnOff), sizeof(hp));
-            entity.health = (hp > 0 && hp <= 100) ? static_cast<uint8_t>(hp) : 0;
-            std::memcpy(&sceneNode, pawnBuf + (kSceneOff - kMinPawnOff), sizeof(uintptr_t));
-            std::memcpy(&bodyComp, pawnBuf + (kBodyCompOff - kMinPawnOff), sizeof(uintptr_t));
+        const uint8_t team = rd8(C_BaseEntity::m_iTeamNum);
+        const uint8_t lifeState = rd8(C_BaseEntity::m_lifeState);
+        const int32_t hp = rd32(C_BaseEntity::m_iHealth);
+        const uintptr_t sceneNode = static_cast<uintptr_t>(rd64(C_BaseEntity::m_pGameSceneNode));
+        const uintptr_t bodyComp = static_cast<uintptr_t>(rd64(C_BaseEntity::m_CBodyComponent));
 
-            Vector3 rawVel{};
-            std::memcpy(&rawVel, pawnBuf + (kVelocityOff - kMinPawnOff), sizeof(Vector3));
-            entity.velocity = rawVel;
-            entity.sceneNode = sceneNode;
-        }
-        else continue;
+        entity.team = team;
+        entity.isAlive = (lifeState == 0);
+        entity.health = (hp > 0 && hp <= 100) ? static_cast<uint8_t>(hp) : 0;
+        entity.sceneNode = sceneNode;
+        rdVec3(C_BaseEntity::m_vecAbsVelocity, entity.velocity);
 
-        const bool teamOk = (entity.team == kTeamT || entity.team == kTeamCT);
-        const bool lifeOk = entity.isAlive;
-        const bool healthOk = (entity.health > 0 && entity.health <= 100);
-        if (!lifeOk || !healthOk || !teamOk) {
-            slot.pawn = 0;
-            slot.bodyComp = 0;
-            slot.cachedC4 = 0;
-            slot.lastC4Check = 0.0;
+        const bool teamOk = (team == kTeamT || team == kTeamCT);
+        if (!entity.isAlive || entity.health == 0 || !teamOk) {
+            slot.pawn = 0; slot.bodyComp = 0;
+            slot.cachedC4 = 0; slot.lastC4Check = 0.0;
+            slot.weaponEnt = 0; slot.weaponHandle = 0; slot.weaponValid = false;
             continue;
         }
 
-        const bool isEnemySide = (entity.team != frame.localTeam);
+        const bool isEnemySide = (team != frame.localTeam);
         const bool espEnabled = isEnemySide ? config.esp_enemy_enable : config.esp_team_enable;
-        const bool aimNeedsBones = config.aim_enable && isEnemySide;
+        const bool aimNeedsBones = config.AimbotNeedsBones() && isEnemySide;
         const bool needBones = espEnabled || aimNeedsBones;
         const bool flagsEnabled = espEnabled && (isEnemySide ? config.esp_enemy_flags : config.esp_team_flags);
 
@@ -461,44 +462,53 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
         const bool needPing = flagsEnabled && (isEnemySide ? config.esp_enemy_flags_ping : config.esp_team_flags_ping);
 
         {
-            float eye[2] = {};
-            if (mem.ReadRaw(pawn + C_CSPlayerPawn::m_angEyeAngles, eye, sizeof(eye))) {
+            const size_t eyeOff = C_CSPlayerPawn::m_angEyeAngles;
+            if (batchOk && eyeOff >= bMin && eyeOff + 8 <= bMax) {
+                float eye[2] = {};
+                memcpy(eye, pawnBuf + (eyeOff - bMin), 8);
                 entity.viewAngles.x = eye[0];
                 entity.viewAngles.y = eye[1];
                 entity.viewAngles.z = 0.0f;
                 entity.hasViewAngles = true;
             }
+            else {
+                float eye[2] = {};
+                if (mem.ReadRaw(pawn + eyeOff, eye, sizeof(eye))) {
+                    entity.viewAngles.x = eye[0];
+                    entity.viewAngles.y = eye[1];
+                    entity.viewAngles.z = 0.0f;
+                    entity.hasViewAngles = true;
+                }
+            }
         }
 
-        if (needScoped)
-            entity.isScoped = mem.Read<bool>(pawn + C_CSPlayerPawn::m_bIsScoped);
-        if (needDefusing)
-            entity.isDefusing = mem.Read<bool>(pawn + C_CSPlayerPawn::m_bIsDefusing);
-        if (needFlashed) {
-            const float flashDur = mem.Read<float>(pawn + C_CSPlayerPawnBase::m_flFlashDuration);
-            entity.isFlashed = (flashDur > 0.0f);
-        }
-        if (needArmor) {
-            const uintptr_t itemServices = mem.Read<uintptr_t>(
-                pawn + C_BasePlayerPawn::m_pItemServices);
-            if (itemServices) {
-                entity.hasHelmet = mem.Read<bool>(
-                    itemServices + CCSPlayer_ItemServices::m_bHasHelmet);
+        if (needScoped)    entity.isScoped = (rd8(C_CSPlayerPawn::m_bIsScoped) != 0);
+        if (needDefusing)  entity.isDefusing = (rd8(C_CSPlayerPawn::m_bIsDefusing) != 0);
+        if (needFlashed)   entity.isFlashed = (rdf(C_CSPlayerPawnBase::m_flFlashDuration) > 0.0f);
+
+        if (needArmor || needMoney || needPing) {
+            if (now - slot.lastSlowPoll > kSlowPollSec) {
+                slot.lastSlowPoll = now;
+                if (needArmor) {
+                    const uintptr_t itemSvc = static_cast<uintptr_t>(rd64(C_BasePlayerPawn::m_pItemServices));
+                    slot.lastArmor = static_cast<uint8_t>(
+                        (std::clamp)(rd32(C_CSPlayerPawn::m_ArmorValue), 0, 100));
+                    slot.lastHelmet = itemSvc ?
+                        mem.Read<bool>(itemSvc + CCSPlayer_ItemServices::m_bHasHelmet) : false;
+                }
+                if (needMoney) {
+                    const uintptr_t svc = mem.Read<uintptr_t>(
+                        slot.controller + CCSPlayerController::m_pInGameMoneyServices);
+                    slot.lastMoney = svc ? mem.Read<int32_t>(
+                        svc + CCSPlayerController_InGameMoneyServices::m_iAccount) : 0;
+                }
+                if (needPing) {
+                    slot.lastPing = mem.Read<int32_t>(slot.controller + CCSPlayerController::m_iPing);
+                }
             }
-            const int32_t armorVal = mem.Read<int32_t>(pawn + C_CSPlayerPawn::m_ArmorValue);
-            entity.armor = (armorVal > 0 && armorVal <= 100)
-                ? static_cast<uint8_t>(armorVal) : 0;
-        }
-        if (needMoney) {
-            const uintptr_t moneyServices = mem.Read<uintptr_t>(
-                slot.controller + CCSPlayerController::m_pInGameMoneyServices);
-            if (moneyServices) {
-                entity.money = mem.Read<int32_t>(
-                    moneyServices + CCSPlayerController_InGameMoneyServices::m_iAccount);
-            }
-        }
-        if (needPing) {
-            entity.ping = mem.Read<int32_t>(slot.controller + CCSPlayerController::m_iPing);
+            if (needArmor) { entity.armor = slot.lastArmor; entity.hasHelmet = slot.lastHelmet; }
+            if (needMoney) entity.money = slot.lastMoney;
+            if (needPing)  entity.ping = slot.lastPing;
         }
 
         if (bodyComp) slot.bodyComp = bodyComp;
@@ -513,48 +523,76 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
         std::memcpy(entity.name, slot.name, sizeof(entity.name));
 
         if (needWeapon || needAmmo || needReload) {
-            WeaponReadNeeds needs;
-            needs.name = needWeapon;
-            needs.reload = needReload;
-            needs.ammo = needAmmo;
-            WeaponInfo wi;
-            ReadWeaponInfo(pawn, entityList, slot, needs, wi);
-            if (needWeapon) std::memcpy(entity.weaponName, wi.name, sizeof(entity.weaponName));
-            if (needReload) entity.isReloading = wi.isReloading;
-            if (needAmmo) { entity.ammo = wi.ammo; entity.reserve = wi.reserve; }
+            const uintptr_t weaponSvc = static_cast<uintptr_t>(rd64(C_BasePlayerPawn::m_pWeaponServices));
+            if (weaponSvc && (now - slot.lastWeaponPoll) > kWeaponPollSec) {
+                slot.lastWeaponPoll = now;
+                const uint32_t handle = mem.Read<uint32_t>(
+                    weaponSvc + CPlayer_WeaponServices::m_hActiveWeapon);
+                if (handle != slot.weaponHandle) {
+                    slot.weaponHandle = handle;
+                    slot.weaponEnt = handle ? ResolveEntityFromHandle(entityList, handle) : 0;
+                    slot.lastDefIndex = 0;
+                    slot.cachedWeaponName[0] = '\0';
+                    slot.weaponValid = false;
+                }
+                if (slot.weaponEnt) {
+                    const uintptr_t w = slot.weaponEnt;
+                    const uintptr_t attrMgr = w + C_EconEntity::m_AttributeManager;
+                    const uintptr_t econItem = attrMgr + C_AttributeContainer::m_Item;
+                    const int defIdx = mem.Read<uint16_t>(
+                        econItem + C_EconItemView::m_iItemDefinitionIndex);
+                    if (defIdx > 0 && static_cast<uint16_t>(defIdx) != slot.lastDefIndex) {
+                        const char* wn = WeaponNameById(defIdx);
+                        if (wn) strncpy_s(slot.cachedWeaponName, sizeof(slot.cachedWeaponName), wn, _TRUNCATE);
+                        else snprintf(slot.cachedWeaponName, sizeof(slot.cachedWeaponName), "Weapon #%d", defIdx);
+                        slot.lastDefIndex = static_cast<uint16_t>(defIdx);
+                    }
+                    slot.weaponIsReloading = mem.Read<bool>(w + C_CSWeaponBase::m_bInReload);
+                    slot.weaponAmmo = mem.Read<int32_t>(w + C_BasePlayerWeapon::m_iClip1);
+                    slot.weaponReserve = mem.Read<int32_t>(w + C_BasePlayerWeapon::m_pReserveAmmo);
+                    slot.weaponValid = true;
+                }
+            }
+            if (slot.weaponValid) {
+                if (needWeapon) std::memcpy(entity.weaponName, slot.cachedWeaponName, sizeof(entity.weaponName));
+                if (needReload) entity.isReloading = slot.weaponIsReloading;
+                if (needAmmo) { entity.ammo = slot.weaponAmmo; entity.reserve = slot.weaponReserve; }
+            }
         }
 
         if (needBomb || needPlanting) {
-            const bool refresh = (!slot.cachedC4) || ((now - slot.lastC4Check) > kC4CacheSec);
-            if (refresh) {
+            if (!slot.cachedC4 || (now - slot.lastC4Check) > kC4CacheSec) {
                 FindC4OnPlayer(pawn, entityList, slot.cachedC4);
                 slot.lastC4Check = now;
             }
             entity.hasBomb = (slot.cachedC4 != 0);
             if (needPlanting && slot.cachedC4) {
-                const bool startedArming = mem.Read<bool>(slot.cachedC4 + C_C4::m_bStartedArming);
-                const bool plantingViaUse = mem.Read<bool>(slot.cachedC4 + C_C4::m_bIsPlantingViaUse);
-                const bool placedAnim = mem.Read<bool>(slot.cachedC4 + C_C4::m_bBombPlacedAnimation);
-                entity.isPlanting = startedArming || plantingViaUse || placedAnim;
+                const bool a = mem.Read<bool>(slot.cachedC4 + C_C4::m_bStartedArming);
+                const bool b = mem.Read<bool>(slot.cachedC4 + C_C4::m_bIsPlantingViaUse);
+                const bool c = mem.Read<bool>(slot.cachedC4 + C_C4::m_bBombPlacedAnimation);
+                entity.isPlanting = a || b || c;
             }
         }
 
         if (!sceneNode) { entity.isDormant = true; frame.entities.push_back(entity); continue; }
 
-        if (mem.ReadRaw(sceneNode + kMinSceneOff, sceneBuf, kSceneSpan)) {
-            entity.isDormant = (sceneBuf[kDormantOff - kMinSceneOff] != 0);
-            std::memcpy(&entity.origin, sceneBuf + (kOriginOff - kMinSceneOff), sizeof(Vector3));
+        if (sSpan <= sizeof(sceneBuf) && mem.ReadRaw(sceneNode + sMin, sceneBuf, sSpan)) {
+            entity.isDormant = (sceneBuf[sDormantOff - sMin] != 0);
+            std::memcpy(&entity.origin, sceneBuf + (sOriginOff - sMin), sizeof(Vector3));
         }
-        else continue;
+        else {
+            entity.isDormant = mem.Read<bool>(sceneNode + sDormantOff);
+            mem.ReadRaw(sceneNode + sOriginOff, &entity.origin, sizeof(Vector3));
+        }
 
         entity.headPos = entity.origin;
         entity.feetPos = entity.origin;
 
         uintptr_t boneArray = 0;
         if (needBones && bodyComp) {
-            const uintptr_t skel = mem.Read<uintptr_t>(bodyComp + kSceneNodeOff);
-            if (skel)
-                boneArray = mem.Read<uintptr_t>(skel + kModelStateOff + kBoneArrayOff);
+            const uintptr_t skel = mem.Read<uintptr_t>(bodyComp + CBodyComponent::m_pSceneNode);
+            if (skel) boneArray = mem.Read<uintptr_t>(
+                skel + CSkeletonInstance::m_modelState + 0x80);
         }
         entity.boneArray = boneArray;
 

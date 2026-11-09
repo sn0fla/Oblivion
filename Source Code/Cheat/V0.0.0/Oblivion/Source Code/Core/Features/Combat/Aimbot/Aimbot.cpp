@@ -4,13 +4,16 @@
 #include "../../../../SDK/Schemas/client_dll.hpp"
 #include "../../../../SDK/Schemas/offsets.hpp"
 #include "../../../Memory/Memory.hpp"
+#include "../../Visuals/Player/ESP/Weapon/Weapon.hpp"
 #include "../../../../External/ImGUI/imgui.h"
 #include <Windows.h>
 #include <cmath>
 #include <cfloat>
+#include <cctype>
 #include <algorithm>
 #include <vector>
 #include <random>
+#include <string>
 
 namespace Aimbot {
 
@@ -204,12 +207,12 @@ namespace Aimbot {
         InitIndirectSyscall();
     }
 
-    static bool ShouldAim() {
-        if (config.aim_mode == 2) return true;
-        const int key = config.aim_key;
+    static bool ShouldAim(const AimSettings& cfg) {
+        if (cfg.mode == 2) return true;
+        const int key = cfg.key;
         if (key <= 0) { s_keyPrev = false; return false; }
         const bool keyDown = (GetAsyncKeyState(key) & 0x8000) != 0;
-        if (config.aim_mode == 0) {
+        if (cfg.mode == 0) {
             if (keyDown && !s_keyPrev) s_toggled = !s_toggled;
             s_keyPrev = keyDown;
             return s_toggled;
@@ -262,34 +265,34 @@ namespace Aimbot {
             const Vector3& neckBone = B(BoneIndex::Neck);
             const bool neckValid = (neckBone.x != 0.0f || neckBone.y != 0.0f || neckBone.z != 0.0f);
             const Vector3 axis = neckValid ? (headBone - neckBone) : Vector3(0.0f, 0.0f, 8.0f);
-            const float penalty = (config.aim_hitbox_priority == 2) ? 15.0f : 0.0f;
+            const float penalty = (config.aim_shared.hitbox_priority == 2) ? 15.0f : 0.0f;
             consider(headBone + axis * 0.75f, penalty);
         }
         if (hitboxMask & 2) {
-            const float penalty = (config.aim_hitbox_priority == 2) ? 10.0f : 0.0f;
+            const float penalty = (config.aim_shared.hitbox_priority == 2) ? 10.0f : 0.0f;
             consider(B(BoneIndex::Neck), penalty);
         }
         if (hitboxMask & 4) {
-            const float penalty = (config.aim_hitbox_priority == 1) ? 10.0f : 0.0f;
+            const float penalty = (config.aim_shared.hitbox_priority == 1) ? 10.0f : 0.0f;
             consider(B(BoneIndex::Spine_2), penalty);
         }
         if (hitboxMask & 8) {
-            const float penalty = (config.aim_hitbox_priority == 1) ? 15.0f : 0.0f;
+            const float penalty = (config.aim_shared.hitbox_priority == 1) ? 15.0f : 0.0f;
             consider(B(BoneIndex::Spine_1), penalty);
         }
         if (hitboxMask & 16) {
-            const float penalty = (config.aim_hitbox_priority == 1) ? 15.0f : 5.0f;
+            const float penalty = (config.aim_shared.hitbox_priority == 1) ? 15.0f : 5.0f;
             consider(B(BoneIndex::LeftUpperArm), penalty);  consider(B(BoneIndex::RightUpperArm), penalty);
             consider(B(BoneIndex::LeftForearm), penalty);   consider(B(BoneIndex::RightForearm), penalty);
             consider(B(BoneIndex::LeftHand), penalty);      consider(B(BoneIndex::RightHand), penalty);
         }
         if (hitboxMask & 32) {
-            const float penalty = (config.aim_hitbox_priority == 1) ? 15.0f : 5.0f;
+            const float penalty = (config.aim_shared.hitbox_priority == 1) ? 15.0f : 5.0f;
             consider(B(BoneIndex::LeftHip), penalty);   consider(B(BoneIndex::RightHip), penalty);
             consider(B(BoneIndex::LeftKnee), penalty);  consider(B(BoneIndex::RightKnee), penalty);
         }
         if (hitboxMask & 64) {
-            const float penalty = (config.aim_hitbox_priority == 1) ? 20.0f : 10.0f;
+            const float penalty = (config.aim_shared.hitbox_priority == 1) ? 20.0f : 10.0f;
             consider(B(BoneIndex::LeftFoot), penalty);  consider(B(BoneIndex::RightFoot), penalty);
         }
 
@@ -350,9 +353,27 @@ namespace Aimbot {
         }
     }
 
-    void RenderFOV(const ViewMatrix& vm) {
-        if (!config.aim_fov_visualize) return;
-        if (config.aim_fov <= 0.0f) return;
+    static bool WeaponNameMatches(const char* preset, const char* actual) {
+        if (!preset || !actual || !actual[0]) return false;
+        std::string a, p;
+        for (const char* s = actual; *s; ++s) {
+            unsigned char c = static_cast<unsigned char>(*s);
+            if (isalnum(c)) a += static_cast<char>(tolower(c));
+        }
+        for (const char* s = preset; *s; ++s) {
+            unsigned char c = static_cast<unsigned char>(*s);
+            if (isalnum(c)) p += static_cast<char>(tolower(c));
+        }
+        if (a.empty() || p.empty()) return false;
+        if (a == p) return true;
+        if (a.find(p) != std::string::npos) return true;
+        if (p.find(a) != std::string::npos) return true;
+        return false;
+    }
+
+    void RenderFOV(const ViewMatrix& vm, const AimSettings& cfg) {
+        if (!cfg.fov_visualize) return;
+        if (cfg.fov <= 0.0f) return;
 
         ImGuiIO& io = ImGui::GetIO();
         const float W = io.DisplaySize.x;
@@ -365,7 +386,7 @@ namespace Aimbot {
         if (sx < 1e-4f || sy < 1e-4f) return;
         if (sx > 100.0f || sy > 100.0f) return;
 
-        const float aimFovDeg = std::clamp(config.aim_fov, 0.1f, 85.0f);
+        const float aimFovDeg = std::clamp(cfg.fov, 0.1f, 85.0f);
         const float tanFov = std::tan(aimFovDeg * Math::PI / 180.0f);
         if (!std::isfinite(tanFov) || tanFov <= 0.0f) return;
 
@@ -375,7 +396,7 @@ namespace Aimbot {
         if (rx < 1.5f && ry < 1.5f) return;
         if (rx > W * 8.0f || ry > H * 8.0f) return;
 
-        const float* c = config.aim_fov_visualize_color;
+        const float* c = cfg.fov_visualize_color;
         const ImU32 col = IM_COL32(
             static_cast<int>(c[0] * 255.0f + 0.5f),
             static_cast<int>(c[1] * 255.0f + 0.5f),
@@ -402,16 +423,50 @@ namespace Aimbot {
     }
 
     void Tick(const FrameSnapshot& frame) {
-        if (!config.aim_enable) return;
-
-        RenderFOV(frame.viewMatrix);
-
-        if (config.show_menu)            return;
-        if (!mem.client || !mem.handle)  return;
+        bool anyEnable = config.aim_shared.enable || config.aim_shared.fov_visualize;
+        if (!anyEnable) {
+            for (const auto& g : config.aim_groups) {
+                if (g.settings.enable || g.settings.fov_visualize) { anyEnable = true; break; }
+            }
+        }
+        if (!anyEnable) return;
+        if (!mem.client || !mem.handle) return;
 
         SeedNoise();
 
-        const bool aiming = ShouldAim();
+        uintptr_t localPawn = 0;
+        const AimSettings* active = &config.aim_shared;
+
+        localPawn = mem.Read<uintptr_t>(
+            mem.client + cs2_dumper::offsets::client_dll::dwLocalPlayerPawn);
+        if (localPawn && localPawn >= 0x10000) {
+            char weaponName[64] = {};
+            GetWeaponNameFromPawn(localPawn, weaponName, sizeof(weaponName));
+            if (weaponName[0]) {
+                for (const auto& grp : config.aim_groups) {
+                    bool matched = false;
+                    for (const auto& w : grp.weapons) {
+                        if (WeaponNameMatches(w.c_str(), weaponName)) {
+                            matched = true;
+                            break;
+                        }
+                    }
+                    if (matched) {
+                        active = &grp.settings;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (active->fov_visualize)
+            RenderFOV(frame.viewMatrix, *active);
+
+        if (config.show_menu) return;
+        if (!active->enable) return;
+        if (!localPawn || localPawn < 0x10000) return;
+
+        const bool aiming = ShouldAim(*active);
 
         if (aiming && !s_aimWasActive) {
             s_burstCurveDir = (RandFloat(0.0f, 1.0f) < 0.5f) ? -1.0f : 1.0f;
@@ -445,19 +500,15 @@ namespace Aimbot {
             return;
         }
 
-        const uintptr_t localPawn = mem.Read<uintptr_t>(
-            mem.client + cs2_dumper::offsets::client_dll::dwLocalPlayerPawn);
-        if (!localPawn || localPawn < 0x10000) return;
-
         Vector3 eyePos = frame.localEyePos;
         if (eyePos.x == 0.0f && eyePos.y == 0.0f && eyePos.z == 0.0f)
             eyePos = frame.localOrigin + Vector3(0.0f, 0.0f, 64.0625f);
 
-        const bool wantVis = config.aim_visible_check;
+        const bool wantVis = active->visible_check;
 
         const FrameEntity* best = nullptr;
         Vector3             bestPos{};
-        float               bestFov = (config.aim_fov > 0.0f) ? config.aim_fov : 180.0f;
+        float               bestFov = (active->fov > 0.0f) ? active->fov : 180.0f;
 
         for (const auto& ent : frame.entities) {
             if (!ent.isAlive || ent.isDormant) continue;
@@ -470,7 +521,7 @@ namespace Aimbot {
 
             Vector3 pos{};
             float   fov = 0.0f;
-            if (!PickBestBone(ent, config.aim_hitbox, eyePos, viewAngles, pos, fov))
+            if (!PickBestBone(ent, active->hitbox, eyePos, viewAngles, pos, fov))
                 continue;
             if (fov > bestFov) continue;
 
@@ -493,9 +544,9 @@ namespace Aimbot {
             s_accumDy = 0.0f;
             s_pending = false;
 
-            if (config.aim_humanize_reaction_enable) {
-                float rmin = (std::max)(0.0f, config.aim_humanize_reaction_min) / 1000.0f;
-                float rmax = (std::max)(0.0f, config.aim_humanize_reaction_max) / 1000.0f;
+            if (active->humanize_reaction_enable) {
+                float rmin = (std::max)(0.0f, active->humanize_reaction_min) / 1000.0f;
+                float rmax = (std::max)(0.0f, active->humanize_reaction_max) / 1000.0f;
                 if (rmax < rmin) std::swap(rmin, rmax);
                 s_reactDelay = (rmax > rmin) ? RandFloat(rmin, rmax) : rmin;
             }
@@ -505,7 +556,7 @@ namespace Aimbot {
             s_reactStart = now;
         }
 
-        if (config.aim_humanize_reaction_enable) {
+        if (active->humanize_reaction_enable) {
             if ((now - s_reactStart) < (double)s_reactDelay)
                 return;
         }
@@ -517,7 +568,7 @@ namespace Aimbot {
 
         const float magRaw = std::sqrt(dYaw * dYaw + dPitch * dPitch);
 
-        const bool humOn = config.aim_humanize_enable;
+        const bool humOn = active->humanize_enable;
 
         if (!s_burstActive && magRaw > kBurstStartDeg) {
             s_burstActive = true;
@@ -527,17 +578,17 @@ namespace Aimbot {
             s_correctionActive = false;
             s_correctionOffsetDeg = 0.0f;
 
-            if (humOn && (config.aim_humanize_overshoot || config.aim_humanize_undershoot)) {
+            if (humOn && (active->humanize_overshoot || active->humanize_undershoot)) {
                 float over = 0.0f;
                 float under = 0.0f;
-                if (config.aim_humanize_overshoot) {
-                    const float lo = (std::min)(config.aim_humanize_overshoot_min, config.aim_humanize_overshoot_max);
-                    const float hi = (std::max)(config.aim_humanize_overshoot_min, config.aim_humanize_overshoot_max);
+                if (active->humanize_overshoot) {
+                    const float lo = (std::min)(active->humanize_overshoot_min, active->humanize_overshoot_max);
+                    const float hi = (std::max)(active->humanize_overshoot_min, active->humanize_overshoot_max);
                     over = RandFloat(lo, hi) * 0.01f * magRaw;
                 }
-                if (config.aim_humanize_undershoot) {
-                    const float lo = (std::min)(config.aim_humanize_undershoot_min, config.aim_humanize_undershoot_max);
-                    const float hi = (std::max)(config.aim_humanize_undershoot_min, config.aim_humanize_undershoot_max);
+                if (active->humanize_undershoot) {
+                    const float lo = (std::min)(active->humanize_undershoot_min, active->humanize_undershoot_max);
+                    const float hi = (std::max)(active->humanize_undershoot_min, active->humanize_undershoot_max);
                     under = RandFloat(lo, hi) * 0.01f * magRaw;
                 }
                 const float net = over - under;
@@ -585,11 +636,11 @@ namespace Aimbot {
         if (std::fabsf(dPitch) < deadzone) dPitch = 0.0f;
         if (dYaw == 0.0f && dPitch == 0.0f) return;
 
-        float smoothVal = config.aim_smooth;
+        float smoothVal = active->smooth;
 
-        if (humOn && config.aim_humanize_rand_smooth) {
-            const float lo = (std::min)(config.aim_humanize_smooth_min, config.aim_humanize_smooth_max);
-            const float hi = (std::max)(config.aim_humanize_smooth_min, config.aim_humanize_smooth_max);
+        if (humOn && active->humanize_rand_smooth) {
+            const float lo = (std::min)(active->humanize_smooth_min, active->humanize_smooth_max);
+            const float hi = (std::max)(active->humanize_smooth_min, active->humanize_smooth_max);
             smoothVal = RandFloat(lo, hi);
         }
 
@@ -607,8 +658,8 @@ namespace Aimbot {
             }
         }
 
-        if (humOn && config.aim_humanize_curve) {
-            const float c = std::clamp(config.aim_humanize_curve_amount, 0.0f, 1.0f);
+        if (humOn && active->humanize_curve) {
+            const float c = std::clamp(active->humanize_curve_amount, 0.0f, 1.0f);
             if (c > 0.0f) {
                 const float mag = std::sqrt(dYaw * dYaw + dPitch * dPitch);
                 if (mag > 1e-3f) {
@@ -627,8 +678,8 @@ namespace Aimbot {
         float dxPixels = -dYaw / s_degPerPixel;
         float dyPixels = dPitch / s_degPerPixel;
 
-        if (humOn && config.aim_humanize_jitter) {
-            const float j = (std::max)(0.0f, config.aim_humanize_jitter_amount);
+        if (humOn && active->humanize_jitter) {
+            const float j = (std::max)(0.0f, active->humanize_jitter_amount);
             if (j > 0.0f) {
                 dxPixels += ValueNoise(now, 0) * j;
                 dyPixels += ValueNoise(now, 1) * j;

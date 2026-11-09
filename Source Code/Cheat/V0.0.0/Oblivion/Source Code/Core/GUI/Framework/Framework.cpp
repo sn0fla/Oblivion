@@ -79,8 +79,8 @@ namespace Framework {
         nullptr,
         "\xEE\x9D\xBB",
         "\xEE\x9C\x93",
-        "\xEE\x9F\x83",
         "\xEE\x9F\xAF",
+        "\xEE\x9F\x83",
     };
 
     void DrawFlowLine(ImDrawList* dl, ImVec2 a, ImVec2 b,

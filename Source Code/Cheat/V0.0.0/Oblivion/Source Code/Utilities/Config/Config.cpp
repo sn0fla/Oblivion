@@ -24,6 +24,67 @@ static void WriteColor(std::ofstream& f, const char* key, const float c[4]) {
     f << key << " = " << c[0] << "," << c[1] << "," << c[2] << "," << c[3] << "\n";
 }
 
+static void WriteAimSettings(std::ofstream& f, const AimSettings& a) {
+    f << "enable = " << (a.enable ? "true" : "false") << "\n";
+    f << "mode = " << a.mode << "\n";
+    f << "key = " << a.key << "\n";
+    f << "fov = " << a.fov << "\n";
+    f << "hitbox = " << a.hitbox << "\n";
+    f << "hitbox_priority = " << a.hitbox_priority << "\n";
+    f << "smooth = " << a.smooth << "\n";
+    f << "visible_check = " << (a.visible_check ? "true" : "false") << "\n";
+    f << "fov_visualize = " << (a.fov_visualize ? "true" : "false") << "\n";
+    WriteColor(f, "fov_visualize_color", a.fov_visualize_color);
+    f << "humanize_enable = " << (a.humanize_enable ? "true" : "false") << "\n";
+    f << "humanize_rand_smooth = " << (a.humanize_rand_smooth ? "true" : "false") << "\n";
+    f << "humanize_smooth_min = " << a.humanize_smooth_min << "\n";
+    f << "humanize_smooth_max = " << a.humanize_smooth_max << "\n";
+    f << "humanize_jitter = " << (a.humanize_jitter ? "true" : "false") << "\n";
+    f << "humanize_jitter_amount = " << a.humanize_jitter_amount << "\n";
+    f << "humanize_overshoot = " << (a.humanize_overshoot ? "true" : "false") << "\n";
+    f << "humanize_overshoot_min = " << a.humanize_overshoot_min << "\n";
+    f << "humanize_overshoot_max = " << a.humanize_overshoot_max << "\n";
+    f << "humanize_undershoot = " << (a.humanize_undershoot ? "true" : "false") << "\n";
+    f << "humanize_undershoot_min = " << a.humanize_undershoot_min << "\n";
+    f << "humanize_undershoot_max = " << a.humanize_undershoot_max << "\n";
+    f << "humanize_curve = " << (a.humanize_curve ? "true" : "false") << "\n";
+    f << "humanize_curve_amount = " << a.humanize_curve_amount << "\n";
+    f << "humanize_reaction_enable = " << (a.humanize_reaction_enable ? "true" : "false") << "\n";
+    f << "humanize_reaction_min = " << a.humanize_reaction_min << "\n";
+    f << "humanize_reaction_max = " << a.humanize_reaction_max << "\n";
+}
+
+static void LoadAimSetting(const std::string& key, const std::string& value, AimSettings& a) {
+    bool b = (value == "true");
+    if (key == "enable") a.enable = b;
+    else if (key == "mode") { try { a.mode = std::stoi(value); } catch (...) { a.mode = 0; } if (a.mode < 0 || a.mode > 2) a.mode = 0; }
+    else if (key == "key") { try { a.key = std::stoi(value); } catch (...) { a.key = 0; } if (a.key < 0 || a.key > 255) a.key = 0; }
+    else if (key == "fov") { try { a.fov = std::stof(value); } catch (...) { a.fov = 180.0f; } if (a.fov < 0.0f) a.fov = 0.0f; if (a.fov > 180.0f) a.fov = 180.0f; }
+    else if (key == "hitbox") { try { a.hitbox = std::stoi(value); } catch (...) { a.hitbox = 1; } if (a.hitbox < 0) a.hitbox = 0; if (a.hitbox > 127) a.hitbox = 127; }
+    else if (key == "hitbox_priority") { try { a.hitbox_priority = std::stoi(value); } catch (...) { a.hitbox_priority = 0; } if (a.hitbox_priority < 0 || a.hitbox_priority > 2) a.hitbox_priority = 0; }
+    else if (key == "smooth") { try { a.smooth = std::stof(value); } catch (...) { a.smooth = 50.0f; } if (a.smooth < 0.0f) a.smooth = 0.0f; if (a.smooth > 100.0f) a.smooth = 100.0f; }
+    else if (key == "visible_check") a.visible_check = b;
+    else if (key == "fov_visualize") a.fov_visualize = b;
+    else if (key == "fov_visualize_color") ParseColor(value, a.fov_visualize_color);
+    else if (key == "humanize_enable") a.humanize_enable = b;
+    else if (key == "humanize_rand_smooth") a.humanize_rand_smooth = b;
+    else if (key == "humanize_smooth_min") { try { a.humanize_smooth_min = std::stof(value); } catch (...) {} if (a.humanize_smooth_min < 0.0f) a.humanize_smooth_min = 0.0f; if (a.humanize_smooth_min > 100.0f) a.humanize_smooth_min = 100.0f; }
+    else if (key == "humanize_smooth_max") { try { a.humanize_smooth_max = std::stof(value); } catch (...) {} if (a.humanize_smooth_max < 0.0f) a.humanize_smooth_max = 0.0f; if (a.humanize_smooth_max > 100.0f) a.humanize_smooth_max = 100.0f; }
+    else if (key == "humanize_jitter") a.humanize_jitter = b;
+    else if (key == "humanize_jitter_amount") { try { a.humanize_jitter_amount = std::stof(value); } catch (...) {} if (a.humanize_jitter_amount < 0.0f) a.humanize_jitter_amount = 0.0f; if (a.humanize_jitter_amount > 20.0f) a.humanize_jitter_amount = 20.0f; }
+    else if (key == "humanize_overshoot") a.humanize_overshoot = b;
+    else if (key == "humanize_overshoot_min") { try { a.humanize_overshoot_min = std::stof(value); } catch (...) {} if (a.humanize_overshoot_min < 0.0f) a.humanize_overshoot_min = 0.0f; if (a.humanize_overshoot_min > 50.0f) a.humanize_overshoot_min = 50.0f; }
+    else if (key == "humanize_overshoot_max") { try { a.humanize_overshoot_max = std::stof(value); } catch (...) {} if (a.humanize_overshoot_max < 0.0f) a.humanize_overshoot_max = 0.0f; if (a.humanize_overshoot_max > 50.0f) a.humanize_overshoot_max = 50.0f; }
+    else if (key == "humanize_undershoot") a.humanize_undershoot = b;
+    else if (key == "humanize_undershoot_min") { try { a.humanize_undershoot_min = std::stof(value); } catch (...) {} if (a.humanize_undershoot_min < 0.0f) a.humanize_undershoot_min = 0.0f; if (a.humanize_undershoot_min > 50.0f) a.humanize_undershoot_min = 50.0f; }
+    else if (key == "humanize_undershoot_max") { try { a.humanize_undershoot_max = std::stof(value); } catch (...) {} if (a.humanize_undershoot_max < 0.0f) a.humanize_undershoot_max = 0.0f; if (a.humanize_undershoot_max > 50.0f) a.humanize_undershoot_max = 50.0f; }
+    else if (key == "humanize_curve") a.humanize_curve = b;
+    else if (key == "humanize_curve_amount") { try { a.humanize_curve_amount = std::stof(value); } catch (...) {} if (a.humanize_curve_amount < 0.0f) a.humanize_curve_amount = 0.0f; if (a.humanize_curve_amount > 1.0f) a.humanize_curve_amount = 1.0f; }
+    else if (key == "humanize_reaction_enable") a.humanize_reaction_enable = b;
+    else if (key == "humanize_reaction_min") { try { a.humanize_reaction_min = std::stof(value); } catch (...) {} if (a.humanize_reaction_min < 0.0f) a.humanize_reaction_min = 0.0f; if (a.humanize_reaction_min > 1000.0f) a.humanize_reaction_min = 1000.0f; }
+    else if (key == "humanize_reaction_max") { try { a.humanize_reaction_max = std::stof(value); } catch (...) {} if (a.humanize_reaction_max < 0.0f) a.humanize_reaction_max = 0.0f; if (a.humanize_reaction_max > 1000.0f) a.humanize_reaction_max = 1000.0f; }
+}
+
 static void WriteFlagsBlock(std::ofstream& f, const char* prefix,
     bool master, const float masterCol[4],
     bool flashed, const float flashedCol[4],
@@ -64,37 +125,9 @@ static void WriteFlagsBlock(std::ofstream& f, const char* prefix,
 void Config::SetDefaults() {
     show_menu = false;
 
-    aim_enable = false;
-    aim_mode = 0;
-    aim_key = 0;
-    aim_fov = 180.0f;
-    aim_hitbox = 1;
-    aim_hitbox_priority = 0;
-    aim_smooth = 50.0f;
-    aim_visible_check = false;
-    aim_fov_visualize = false;
-    aim_fov_visualize_color[0] = 1.0f;
-    aim_fov_visualize_color[1] = 1.0f;
-    aim_fov_visualize_color[2] = 1.0f;
-    aim_fov_visualize_color[3] = 1.0f;
-
-    aim_humanize_enable = false;
-    aim_humanize_rand_smooth = false;
-    aim_humanize_smooth_min = 30.0f;
-    aim_humanize_smooth_max = 70.0f;
-    aim_humanize_jitter = false;
-    aim_humanize_jitter_amount = 1.5f;
-    aim_humanize_overshoot = false;
-    aim_humanize_overshoot_min = 5.0f;
-    aim_humanize_overshoot_max = 15.0f;
-    aim_humanize_undershoot = false;
-    aim_humanize_undershoot_min = 5.0f;
-    aim_humanize_undershoot_max = 15.0f;
-    aim_humanize_curve = false;
-    aim_humanize_curve_amount = 0.5f;
-    aim_humanize_reaction_enable = false;
-    aim_humanize_reaction_min = 120.0f;
-    aim_humanize_reaction_max = 280.0f;
+    aim_shared = AimSettings{};
+    aim_groups.clear();
+    aim_current_edit = 0;
 
     esp_enemy_enable = false;
     esp_enemy_box = false;
@@ -225,33 +258,20 @@ void Config::Save(const std::string& path) {
     file << "show_menu = " << (show_menu ? "true" : "false") << "\n";
 
     file << "\n[Aimbot]\n";
-    file << "enable = " << (aim_enable ? "true" : "false") << "\n";
-    file << "mode = " << aim_mode << "\n";
-    file << "key = " << aim_key << "\n";
-    file << "fov = " << aim_fov << "\n";
-    file << "hitbox = " << aim_hitbox << "\n";
-    file << "hitbox_priority = " << aim_hitbox_priority << "\n";
-    file << "smooth = " << aim_smooth << "\n";
-    file << "visible_check = " << (aim_visible_check ? "true" : "false") << "\n";
-    file << "fov_visualize = " << (aim_fov_visualize ? "true" : "false") << "\n";
-    WriteColor(file, "fov_visualize_color", aim_fov_visualize_color);
-    file << "humanize_enable = " << (aim_humanize_enable ? "true" : "false") << "\n";
-    file << "humanize_rand_smooth = " << (aim_humanize_rand_smooth ? "true" : "false") << "\n";
-    file << "humanize_smooth_min = " << aim_humanize_smooth_min << "\n";
-    file << "humanize_smooth_max = " << aim_humanize_smooth_max << "\n";
-    file << "humanize_jitter = " << (aim_humanize_jitter ? "true" : "false") << "\n";
-    file << "humanize_jitter_amount = " << aim_humanize_jitter_amount << "\n";
-    file << "humanize_overshoot = " << (aim_humanize_overshoot ? "true" : "false") << "\n";
-    file << "humanize_overshoot_min = " << aim_humanize_overshoot_min << "\n";
-    file << "humanize_overshoot_max = " << aim_humanize_overshoot_max << "\n";
-    file << "humanize_undershoot = " << (aim_humanize_undershoot ? "true" : "false") << "\n";
-    file << "humanize_undershoot_min = " << aim_humanize_undershoot_min << "\n";
-    file << "humanize_undershoot_max = " << aim_humanize_undershoot_max << "\n";
-    file << "humanize_curve = " << (aim_humanize_curve ? "true" : "false") << "\n";
-    file << "humanize_curve_amount = " << aim_humanize_curve_amount << "\n";
-    file << "humanize_reaction_enable = " << (aim_humanize_reaction_enable ? "true" : "false") << "\n";
-    file << "humanize_reaction_min = " << aim_humanize_reaction_min << "\n";
-    file << "humanize_reaction_max = " << aim_humanize_reaction_max << "\n";
+    WriteAimSettings(file, aim_shared);
+    file << "current_edit = " << aim_current_edit << "\n";
+
+    for (size_t i = 0; i < aim_groups.size(); ++i) {
+        file << "\n[Aimbot_Group_" << i << "]\n";
+        file << "name = " << aim_groups[i].name << "\n";
+        std::string weapons;
+        for (size_t j = 0; j < aim_groups[i].weapons.size(); ++j) {
+            if (j > 0) weapons += "|";
+            weapons += aim_groups[i].weapons[j];
+        }
+        file << "weapons = " << weapons << "\n";
+        WriteAimSettings(file, aim_groups[i].settings);
+    }
 
     file << "\n[ESP_Enemy]\n";
     file << "enable = " << (esp_enemy_enable ? "true" : "false") << "\n";
@@ -417,6 +437,7 @@ void Config::Load(const std::string& path) {
 
     std::string line;
     std::string currentSection;
+    int groupSectionIdx = -1;
 
     while (std::getline(file, line)) {
         size_t start = line.find_first_not_of(" \t\n\r");
@@ -428,6 +449,16 @@ void Config::Load(const std::string& path) {
 
         if (line[0] == '[' && line[line.length() - 1] == ']') {
             currentSection = line.substr(1, line.length() - 2);
+            groupSectionIdx = -1;
+            const std::string prefix = "Aimbot_Group_";
+            if (currentSection.compare(0, prefix.size(), prefix) == 0) {
+                try { groupSectionIdx = std::stoi(currentSection.substr(prefix.size())); }
+                catch (...) { groupSectionIdx = -1; }
+                if (groupSectionIdx >= 0) {
+                    while ((int)aim_groups.size() <= groupSectionIdx)
+                        aim_groups.emplace_back();
+                }
+            }
             continue;
         }
 
@@ -448,109 +479,31 @@ void Config::Load(const std::string& path) {
             if (key == "show_menu") show_menu = b;
         }
         else if (currentSection == "Aimbot") {
-            if (key == "enable") aim_enable = b;
-            else if (key == "mode") {
-                try { aim_mode = std::stoi(value); }
-                catch (...) { aim_mode = 0; }
-                if (aim_mode < 0 || aim_mode > 2) aim_mode = 0;
+            if (key == "current_edit") {
+                try { aim_current_edit = std::stoi(value); }
+                catch (...) { aim_current_edit = 0; }
             }
-            else if (key == "key") {
-                try { aim_key = std::stoi(value); }
-                catch (...) { aim_key = 0; }
-                if (aim_key < 0 || aim_key > 255) aim_key = 0;
+            else {
+                LoadAimSetting(key, value, aim_shared);
             }
-            else if (key == "fov") {
-                try { aim_fov = std::stof(value); }
-                catch (...) { aim_fov = 180.0f; }
-                if (aim_fov < 0.0f) aim_fov = 0.0f;
-                if (aim_fov > 180.0f) aim_fov = 180.0f;
+        }
+        else if (groupSectionIdx >= 0 && groupSectionIdx < (int)aim_groups.size()) {
+            auto& grp = aim_groups[groupSectionIdx];
+            if (key == "name") grp.name = value;
+            else if (key == "weapons") {
+                grp.weapons.clear();
+                std::stringstream ss(value);
+                std::string tok;
+                while (std::getline(ss, tok, '|')) {
+                    size_t s2 = tok.find_first_not_of(" \t");
+                    if (s2 == std::string::npos) continue;
+                    size_t e2 = tok.find_last_not_of(" \t");
+                    tok = tok.substr(s2, e2 - s2 + 1);
+                    if (!tok.empty()) grp.weapons.push_back(tok);
+                }
             }
-            else if (key == "hitbox") {
-                try { aim_hitbox = std::stoi(value); }
-                catch (...) { aim_hitbox = 1; }
-                if (aim_hitbox < 0) aim_hitbox = 0;
-                if (aim_hitbox > 127) aim_hitbox = 127;
-            }
-            else if (key == "hitbox_priority") {
-                try { aim_hitbox_priority = std::stoi(value); }
-                catch (...) { aim_hitbox_priority = 0; }
-                if (aim_hitbox_priority < 0 || aim_hitbox_priority > 2) aim_hitbox_priority = 0;
-            }
-            else if (key == "smooth") {
-                try { aim_smooth = std::stof(value); }
-                catch (...) { aim_smooth = 50.0f; }
-                if (aim_smooth < 0.0f) aim_smooth = 0.0f;
-                if (aim_smooth > 100.0f) aim_smooth = 100.0f;
-            }
-            else if (key == "visible_check") aim_visible_check = b;
-            else if (key == "fov_visualize") aim_fov_visualize = b;
-            else if (key == "fov_visualize_color") ParseColor(value, aim_fov_visualize_color);
-            else if (key == "humanize_enable") aim_humanize_enable = b;
-            else if (key == "humanize_rand_smooth") aim_humanize_rand_smooth = b;
-            else if (key == "humanize_smooth_min") {
-                try { aim_humanize_smooth_min = std::stof(value); }
-                catch (...) {}
-                if (aim_humanize_smooth_min < 0.0f) aim_humanize_smooth_min = 0.0f;
-                if (aim_humanize_smooth_min > 100.0f) aim_humanize_smooth_min = 100.0f;
-            }
-            else if (key == "humanize_smooth_max") {
-                try { aim_humanize_smooth_max = std::stof(value); }
-                catch (...) {}
-                if (aim_humanize_smooth_max < 0.0f) aim_humanize_smooth_max = 0.0f;
-                if (aim_humanize_smooth_max > 100.0f) aim_humanize_smooth_max = 100.0f;
-            }
-            else if (key == "humanize_jitter") aim_humanize_jitter = b;
-            else if (key == "humanize_jitter_amount") {
-                try { aim_humanize_jitter_amount = std::stof(value); }
-                catch (...) {}
-                if (aim_humanize_jitter_amount < 0.0f) aim_humanize_jitter_amount = 0.0f;
-                if (aim_humanize_jitter_amount > 20.0f) aim_humanize_jitter_amount = 20.0f;
-            }
-            else if (key == "humanize_overshoot") aim_humanize_overshoot = b;
-            else if (key == "humanize_overshoot_min") {
-                try { aim_humanize_overshoot_min = std::stof(value); }
-                catch (...) {}
-                if (aim_humanize_overshoot_min < 0.0f) aim_humanize_overshoot_min = 0.0f;
-                if (aim_humanize_overshoot_min > 50.0f) aim_humanize_overshoot_min = 50.0f;
-            }
-            else if (key == "humanize_overshoot_max") {
-                try { aim_humanize_overshoot_max = std::stof(value); }
-                catch (...) {}
-                if (aim_humanize_overshoot_max < 0.0f) aim_humanize_overshoot_max = 0.0f;
-                if (aim_humanize_overshoot_max > 50.0f) aim_humanize_overshoot_max = 50.0f;
-            }
-            else if (key == "humanize_undershoot") aim_humanize_undershoot = b;
-            else if (key == "humanize_undershoot_min") {
-                try { aim_humanize_undershoot_min = std::stof(value); }
-                catch (...) {}
-                if (aim_humanize_undershoot_min < 0.0f) aim_humanize_undershoot_min = 0.0f;
-                if (aim_humanize_undershoot_min > 50.0f) aim_humanize_undershoot_min = 50.0f;
-            }
-            else if (key == "humanize_undershoot_max") {
-                try { aim_humanize_undershoot_max = std::stof(value); }
-                catch (...) {}
-                if (aim_humanize_undershoot_max < 0.0f) aim_humanize_undershoot_max = 0.0f;
-                if (aim_humanize_undershoot_max > 50.0f) aim_humanize_undershoot_max = 50.0f;
-            }
-            else if (key == "humanize_curve") aim_humanize_curve = b;
-            else if (key == "humanize_curve_amount") {
-                try { aim_humanize_curve_amount = std::stof(value); }
-                catch (...) {}
-                if (aim_humanize_curve_amount < 0.0f) aim_humanize_curve_amount = 0.0f;
-                if (aim_humanize_curve_amount > 1.0f) aim_humanize_curve_amount = 1.0f;
-            }
-            else if (key == "humanize_reaction_enable") aim_humanize_reaction_enable = b;
-            else if (key == "humanize_reaction_min") {
-                try { aim_humanize_reaction_min = std::stof(value); }
-                catch (...) {}
-                if (aim_humanize_reaction_min < 0.0f) aim_humanize_reaction_min = 0.0f;
-                if (aim_humanize_reaction_min > 1000.0f) aim_humanize_reaction_min = 1000.0f;
-            }
-            else if (key == "humanize_reaction_max") {
-                try { aim_humanize_reaction_max = std::stof(value); }
-                catch (...) {}
-                if (aim_humanize_reaction_max < 0.0f) aim_humanize_reaction_max = 0.0f;
-                if (aim_humanize_reaction_max > 1000.0f) aim_humanize_reaction_max = 1000.0f;
+            else {
+                LoadAimSetting(key, value, grp.settings);
             }
         }
         else if (currentSection == "ESP_Enemy") {
@@ -561,10 +514,7 @@ void Config::Load(const std::string& path) {
             else if (key == "fill") esp_enemy_box_style_fill = b;
             else if (key == "outline") esp_enemy_box_outline = b;
             else if (key == "skeleton") esp_enemy_skeleton = b;
-            else if (key == "skeleton_joints") {
-                try { esp_enemy_skeleton_joints = static_cast<uint32_t>(std::stoul(value)) & kSkelMask; }
-                catch (...) { esp_enemy_skeleton_joints = kSkelMask; }
-            }
+            else if (key == "skeleton_joints") { try { esp_enemy_skeleton_joints = static_cast<uint32_t>(std::stoul(value)) & kSkelMask; } catch (...) { esp_enemy_skeleton_joints = kSkelMask; } }
             else if (key == "skeleton_draw_joints") esp_enemy_skeleton_draw_joints = b;
             else if (key == "name") esp_enemy_name = b;
             else if (key == "healthbar") esp_enemy_healthbar = b;
@@ -613,10 +563,7 @@ void Config::Load(const std::string& path) {
             else if (key == "fill") esp_team_box_style_fill = b;
             else if (key == "outline") esp_team_box_outline = b;
             else if (key == "skeleton") esp_team_skeleton = b;
-            else if (key == "skeleton_joints") {
-                try { esp_team_skeleton_joints = static_cast<uint32_t>(std::stoul(value)) & kSkelMask; }
-                catch (...) { esp_team_skeleton_joints = kSkelMask; }
-            }
+            else if (key == "skeleton_joints") { try { esp_team_skeleton_joints = static_cast<uint32_t>(std::stoul(value)) & kSkelMask; } catch (...) { esp_team_skeleton_joints = kSkelMask; } }
             else if (key == "skeleton_draw_joints") esp_team_skeleton_draw_joints = b;
             else if (key == "name") esp_team_name = b;
             else if (key == "healthbar") esp_team_healthbar = b;
@@ -670,4 +617,7 @@ void Config::Load(const std::string& path) {
     }
 
     file.close();
+
+    if (aim_current_edit < 0 || aim_current_edit >(int)aim_groups.size())
+        aim_current_edit = 0;
 }

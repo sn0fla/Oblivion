@@ -16,47 +16,67 @@ namespace Features::ESP {
 
     inline BoxRect ComputeBox(const FrameEntity& ent, const ViewMatrix& vm, int width, int height) {
         BoxRect rect;
-        Vector2 feetScreen, headScreen, centerScreen;
-        if (!Math::WorldToScreen(ent.feetPos, feetScreen, vm, width, height)) return rect;
-        if (!Math::WorldToScreen(ent.headPos, headScreen, vm, width, height)) return rect;
+        if (ent.boxCached) {
+            rect.valid = ent.boxValid;
+            rect.left = ent.boxL;
+            rect.top = ent.boxT;
+            rect.right = ent.boxR;
+            rect.bottom = ent.boxB;
+            rect.centerX = ent.boxCx;
+            return rect;
+        }
 
-        const Vector3 centerWorld = ent.hasBones
-            ? ent.bones[static_cast<int>(BoneIndex::Spine_1)]
-            : ent.origin;
+        do {
+            Vector2 feetScreen, headScreen, centerScreen;
+            if (!Math::WorldToScreen(ent.feetPos, feetScreen, vm, width, height)) break;
+            if (!Math::WorldToScreen(ent.headPos, headScreen, vm, width, height)) break;
 
-        const bool centerOk = Math::WorldToScreen(centerWorld, centerScreen, vm, width, height);
+            const Vector3 centerWorld = ent.hasBones
+                ? ent.bones[static_cast<int>(BoneIndex::Spine_1)]
+                : ent.origin;
 
-        if (!std::isfinite(feetScreen.y) || !std::isfinite(headScreen.y)) return rect;
+            const bool centerOk = Math::WorldToScreen(centerWorld, centerScreen, vm, width, height);
 
-        const float centerX = centerOk ? centerScreen.x : feetScreen.x;
-        if (!std::isfinite(centerX)) return rect;
+            if (!std::isfinite(feetScreen.y) || !std::isfinite(headScreen.y)) break;
 
-        const float rawH = feetScreen.y - headScreen.y;
-        if (rawH < 1.0f) return rect;
+            const float centerX = centerOk ? centerScreen.x : feetScreen.x;
+            if (!std::isfinite(centerX)) break;
 
-        const float fh = static_cast<float>(height);
-        const float closeT = (std::clamp)(rawH / (fh * 0.75f), 0.0f, 1.0f);
+            const float rawH = feetScreen.y - headScreen.y;
+            if (rawH < 1.0f) break;
 
-        const float kTopMul = 0.15f + closeT * 0.20f;
-        const float kBotMul = 0.15f + closeT * 0.10f;
-        const float kAspect = 0.60f + closeT * 0.25f;
+            const float fh = static_cast<float>(height);
+            const float closeT = (std::clamp)(rawH / (fh * 0.75f), 0.0f, 1.0f);
 
-        const float boxH = rawH * (1.0f + kTopMul + kBotMul);
-        const float boxW = boxH * kAspect;
+            const float kTopMul = 0.15f + closeT * 0.20f;
+            const float kBotMul = 0.15f + closeT * 0.10f;
+            const float kAspect = 0.60f + closeT * 0.25f;
 
-        if (boxH > fh * 1.5f || boxW > static_cast<float>(width) * 1.5f) return rect;
+            const float boxH = rawH * (1.0f + kTopMul + kBotMul);
+            const float boxW = boxH * kAspect;
 
-        const float topY = headScreen.y - rawH * kTopMul;
-        const float botY = topY + boxH;
-        const float left = centerX - (boxW * 0.5f);
-        const float right = left + boxW;
+            if (boxH > fh * 1.5f || boxW > static_cast<float>(width) * 1.5f) break;
 
-        rect.valid = true;
-        rect.left = left;
-        rect.top = topY;
-        rect.right = right;
-        rect.bottom = botY;
-        rect.centerX = centerX;
+            const float topY = headScreen.y - rawH * kTopMul;
+            const float botY = topY + boxH;
+            const float left = centerX - (boxW * 0.5f);
+            const float right = left + boxW;
+
+            rect.valid = true;
+            rect.left = left;
+            rect.top = topY;
+            rect.right = right;
+            rect.bottom = botY;
+            rect.centerX = centerX;
+        } while (false);
+
+        ent.boxCached = true;
+        ent.boxValid = rect.valid;
+        ent.boxL = rect.left;
+        ent.boxT = rect.top;
+        ent.boxR = rect.right;
+        ent.boxB = rect.bottom;
+        ent.boxCx = rect.centerX;
         return rect;
     }
 

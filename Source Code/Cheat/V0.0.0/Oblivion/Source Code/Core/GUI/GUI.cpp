@@ -108,6 +108,38 @@ namespace GUI {
     static float  g_humEnableHover = 0.0f;
     static float  g_humEnableSel = 0.0f;
 
+    static bool   g_aimGroupsExpanded = false;
+    static float  g_aimGroupsExpandT = 0.0f;
+    static float  g_aimGroupsHover = 0.0f;
+    static float  g_aimGroupRowHover[33] = {};
+    static float  g_aimGroupRowSel[33] = {};
+    static float  g_aimGroupDeleteHover[33] = {};
+    static float  g_aimGroupRenameHover[33] = {};
+    static float  g_aimCreateGroupHover = 0.0f;
+    static constexpr int kMaxAimGroups = 32;
+
+    static bool   g_aimWeaponExpanded = false;
+    static float  g_aimWeaponExpandT = 0.0f;
+    static float  g_aimWeaponHover = 0.0f;
+    static float  g_aimWeaponCbHover[64] = {};
+    static float  g_aimWeaponCbSel[64] = {};
+    static bool   g_aimGroupCreatePending = false;
+    static char   g_aimGroupCreateName[64] = {};
+    static bool   g_aimGroupRenamePending = false;
+    static int    g_aimGroupRenameIdx = -1;
+    static char   g_aimGroupRenameName[64] = {};
+
+    static const char* kAimWeaponPreset[] = {
+        "AK-47", "M4A4", "M4A1-S", "AUG", "SG 553", "Galil AR", "FAMAS",
+        "AWP", "SSG 08", "SCAR-20", "G3SG1",
+        "MP9", "MP7", "MP5-SD", "UMP-45", "P90", "PP-Bizon", "MAC-10",
+        "Nova", "XM1014", "Sawed-Off", "MAG-7",
+        "Glock-18", "USP-S", "P2000", "P250", "Five-SeveN", "Tec-9", "CZ75-Auto", "Desert Eagle", "R8 Revolver", "Dual Berettas",
+        "M249", "Negev"
+    };
+    static constexpr int kAimWeaponPresetCount =
+        (int)(sizeof(kAimWeaponPreset) / sizeof(kAimWeaponPreset[0]));
+
     static constexpr int kHumFeatureCount = 6;
     static bool  g_humExpanded[kHumFeatureCount] = {};
     static float g_humExpandT[kHumFeatureCount] = {};
@@ -173,6 +205,29 @@ namespace GUI {
         }
         snprintf(buf, sizeof(buf), "VK%02X", vk);
         return buf;
+    }
+
+    static bool WeaponGroupHas(const AimWeaponGroup& grp, const char* name) {
+        for (const auto& w : grp.weapons)
+            if (w == name) return true;
+        return false;
+    }
+
+    static void WeaponGroupToggle(AimWeaponGroup& grp, const char* name) {
+        for (size_t i = 0; i < grp.weapons.size(); ++i) {
+            if (grp.weapons[i] == name) {
+                grp.weapons.erase(grp.weapons.begin() + i);
+                return;
+            }
+        }
+        grp.weapons.emplace_back(name);
+    }
+
+    static int FindGroupByName(const char* name) {
+        for (int gi = 0; gi < (int)config.aim_groups.size(); ++gi) {
+            if (config.aim_groups[gi].name == name) return gi;
+        }
+        return -1;
     }
 
     static float* GetEspColorPtr(int sub, int idx) {
@@ -713,25 +768,6 @@ namespace GUI {
     static void DrawAimbotCard(ImDrawList* dl, ImVec2 min, ImVec2 max,
         float alpha, float s, ImFont* textFont, float labelFs, float dt)
     {
-        const bool wasCapturing = s_aimKeyCapture;
-
-        if (s_aimKeyCapture) {
-            if (s_aimKeyWaitRelease) {
-                if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
-                    s_aimKeyWaitRelease = false;
-                }
-            }
-            else {
-                for (int vk = 1; vk < 256; ++vk) {
-                    if (GetAsyncKeyState(vk) & 0x8000) {
-                        config.aim_key = (vk == VK_ESCAPE) ? 0 : vk;
-                        s_aimKeyCapture = false;
-                        break;
-                    }
-                }
-            }
-        }
-
         const float pad = 14.0f * s;
         const float rowH = 24.0f * s;
         const float optRowH = 22.0f * s;
@@ -766,6 +802,458 @@ namespace GUI {
 
         {
             const float cy = rowY + rowH * 0.5f;
+            const char* lbl = "Group";
+            const ImVec2 lsz = textFont
+                ? textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, lbl)
+                : ImVec2(36.0f * s, labelFs);
+
+            if (textFont)
+                dl->AddText(textFont, labelFs,
+                    ImVec2(floorf(contentX + 0.5f), floorf(cy - lsz.y * 0.5f + 0.5f)),
+                    IM_COL32(200, 195, 235, (int)(alpha * 255.0f)), lbl);
+
+            const ImVec2 expC(contentX + lsz.x + expGap + iconSz * 0.5f, cy);
+            const float eh = iconSz * 0.75f;
+            const ImVec2 expMin(expC.x - eh, expC.y - eh);
+            const ImVec2 expMax(expC.x + eh, expC.y + eh);
+
+            const bool expHov = mouse.x >= expMin.x && mouse.x <= expMax.x
+                && mouse.y >= expMin.y && mouse.y <= expMax.y;
+
+            if (expHov && ImGui::IsMouseClicked(0)) {
+                Framework::PlayClickSound();
+                g_aimGroupsExpanded = !g_aimGroupsExpanded;
+            }
+
+            g_aimGroupsHover += ((expHov ? 1.0f : 0.0f) - g_aimGroupsHover) * kApproach;
+            g_aimGroupsExpandT += (((g_aimGroupsExpanded) ? 1.0f : 0.0f) - g_aimGroupsExpandT) * kApproach;
+
+            const int eR = (int)(150 + (189 - 150) * g_aimGroupsHover);
+            const int eG = (int)(140 + (176 - 140) * g_aimGroupsHover);
+            const int eB = (int)(205 + (255 - 205) * g_aimGroupsHover);
+            const ImU32 eCol = IM_COL32(eR, eG, eB, (int)(alpha * 255.0f));
+            DrawChevronLocal(dl, expC, iconSz, 1.5707963f * g_aimGroupsExpandT, eCol, 1.6f * s);
+
+            const char* curName = "Shared";
+            if (config.aim_current_edit > 0 && config.aim_current_edit <= (int)config.aim_groups.size())
+                curName = config.aim_groups[config.aim_current_edit - 1].name.c_str();
+
+            if (textFont) {
+                const float mx = expMax.x + 6.0f * s;
+                const ImVec2 msz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, curName);
+                const float my = cy - msz.y * 0.5f;
+                dl->AddText(textFont, labelFs, ImVec2(floorf(mx + 0.5f), floorf(my + 0.5f)),
+                    IM_COL32(200, 190, 240, (int)(alpha * 255.0f)), curName);
+            }
+
+            rowY += rowH;
+        }
+
+        if (g_aimGroupsExpandT > 0.001f) {
+            const float rowA = alpha * g_aimGroupsExpandT;
+            int clickedDelete = -1;
+            int clickedRename = -1;
+            int clickedSelect = -1;
+            bool clickedCreate = false;
+
+            {
+                const ImVec2 rMin(contentX + indent, rowY);
+                const ImVec2 rMax(max.x - pad, rowY + optRowH);
+
+                ImGui::SetCursorScreenPos(rMin);
+                ImGui::PushID(7100);
+                ImGui::InvisibleButton("##grp_shared", ImVec2(rMax.x - rMin.x, optRowH));
+                ImGui::PopID();
+
+                const bool hov = ImGui::IsItemHovered();
+                const bool sel = (config.aim_current_edit == 0);
+
+                g_aimGroupRowHover[0] += ((hov ? 1.0f : 0.0f) - g_aimGroupRowHover[0]) * kApproach;
+                g_aimGroupRowSel[0] += (((sel) ? 1.0f : 0.0f) - g_aimGroupRowSel[0]) * kApproach;
+
+                if (ImGui::IsItemClicked(0)) {
+                    Framework::PlayClickSound();
+                    config.aim_current_edit = 0;
+                }
+
+                const float st = (g_aimGroupRowSel[0] > g_aimGroupRowHover[0]) ? g_aimGroupRowSel[0] : g_aimGroupRowHover[0];
+
+                if (st > 0.005f) {
+                    dl->AddRectFilled(rMin, rMax,
+                        IM_COL32(120, 110, 180, (int)(rowA * 0.22f * st * 255.0f)), 3.0f * s);
+                }
+
+                const char* txt = "Shared";
+                ImVec2 tsz = textFont ? textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, txt) : ImVec2(0.0f, 0.0f);
+                const float tx = rMin.x + 8.0f * s;
+                const float ty = rMin.y + (optRowH - tsz.y) * 0.5f;
+
+                if (textFont) {
+                    const int rC = (int)(150 + (235 - 150) * st);
+                    const int gC = (int)(140 + (228 - 140) * st);
+                    const int bC = (int)(205 + (255 - 205) * st);
+                    dl->AddText(textFont, labelFs, ImVec2(floorf(tx + 0.5f), floorf(ty + 0.5f)),
+                        IM_COL32(rC, gC, bC, (int)(rowA * 255.0f)), txt);
+                }
+
+                if (g_aimGroupRowSel[0] > 0.01f) {
+                    const float uH = 2.0f * s;
+                    const float uW = (tsz.x > 0.0f ? tsz.x : (rMax.x - rMin.x) * 0.4f) * g_aimGroupRowSel[0];
+                    const float uY = rMax.y - uH - 1.0f * s;
+                    const float cx = (tsz.x > 0.0f) ? (tx + tsz.x * 0.5f) : ((rMin.x + rMax.x) * 0.5f);
+                    dl->AddRectFilled(
+                        ImVec2(cx - uW * 0.5f, uY),
+                        ImVec2(cx + uW * 0.5f, uY + uH),
+                        IM_COL32(189, 176, 255, (int)(g_aimGroupRowSel[0] * rowA * 255.0f)),
+                        uH * 0.5f);
+                }
+
+                rowY += optRowH * g_aimGroupsExpandT;
+            }
+
+            const int groupCount = (int)config.aim_groups.size();
+
+            for (int gi = 0; gi < groupCount && gi < kMaxAimGroups; ++gi) {
+                const ImVec2 rMin(contentX + indent, rowY);
+                const ImVec2 rMax(max.x - pad, rowY + optRowH);
+
+                const float actionW = optRowH;
+                const ImVec2 delMin(rMax.x - actionW, rMin.y);
+                const ImVec2 delMax(rMax.x, rMax.y);
+                const ImVec2 renMin(rMax.x - actionW * 2.0f, rMin.y);
+                const ImVec2 renMax(rMax.x - actionW, rMax.y);
+
+                ImGui::SetCursorScreenPos(rMin);
+                ImGui::PushID(7200 + gi);
+                ImGui::InvisibleButton("##grp_row", ImVec2(rMax.x - rMin.x - actionW * 2.0f, optRowH));
+                ImGui::PopID();
+
+                const bool rowHov = ImGui::IsItemHovered();
+                const bool rowClicked = ImGui::IsItemClicked(0);
+
+                ImGui::SetCursorScreenPos(renMin);
+                ImGui::PushID(7310 + gi);
+                ImGui::InvisibleButton("##grp_ren", ImVec2(actionW, optRowH));
+                ImGui::PopID();
+
+                const bool renHov = ImGui::IsItemHovered();
+                const bool renClicked = ImGui::IsItemClicked(0);
+
+                ImGui::SetCursorScreenPos(delMin);
+                ImGui::PushID(7300 + gi);
+                ImGui::InvisibleButton("##grp_del", ImVec2(actionW, optRowH));
+                ImGui::PopID();
+
+                const bool delHov = ImGui::IsItemHovered();
+                const bool delClicked = ImGui::IsItemClicked(0);
+
+                const bool sel = (config.aim_current_edit == gi + 1);
+
+                const int animIdx = gi + 1;
+
+                g_aimGroupRowHover[animIdx] += ((rowHov ? 1.0f : 0.0f) - g_aimGroupRowHover[animIdx]) * kApproach;
+                g_aimGroupRowSel[animIdx] += (((sel) ? 1.0f : 0.0f) - g_aimGroupRowSel[animIdx]) * kApproach;
+                g_aimGroupDeleteHover[animIdx] += ((delHov ? 1.0f : 0.0f) - g_aimGroupDeleteHover[animIdx]) * kApproach;
+                g_aimGroupRenameHover[animIdx] += ((renHov ? 1.0f : 0.0f) - g_aimGroupRenameHover[animIdx]) * kApproach;
+
+                if (delClicked) clickedDelete = gi;
+                else if (renClicked) clickedRename = gi;
+                else if (rowClicked) clickedSelect = gi;
+
+                const float st = (g_aimGroupRowSel[animIdx] > g_aimGroupRowHover[animIdx])
+                    ? g_aimGroupRowSel[animIdx] : g_aimGroupRowHover[animIdx];
+
+                if (st > 0.005f) {
+                    dl->AddRectFilled(rMin, rMax,
+                        IM_COL32(120, 110, 180, (int)(rowA * 0.22f * st * 255.0f)), 3.0f * s);
+                }
+
+                const char* txt = config.aim_groups[gi].name.c_str();
+                ImVec2 tsz = textFont ? textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, txt) : ImVec2(0.0f, 0.0f);
+                const float tx = rMin.x + 8.0f * s;
+                const float ty = rMin.y + (optRowH - tsz.y) * 0.5f;
+
+                if (textFont) {
+                    const int rC = (int)(150 + (235 - 150) * st);
+                    const int gC = (int)(140 + (228 - 140) * st);
+                    const int bC = (int)(205 + (255 - 205) * st);
+
+                    dl->PushClipRect(rMin, ImVec2(renMin.x - 4.0f * s, rMax.y), true);
+                    dl->AddText(textFont, labelFs, ImVec2(floorf(tx + 0.5f), floorf(ty + 0.5f)),
+                        IM_COL32(rC, gC, bC, (int)(rowA * 255.0f)), txt);
+                    dl->PopClipRect();
+                }
+
+                {
+                    const float dv = g_aimGroupRenameHover[animIdx];
+                    const float rcx = (renMin.x + renMax.x) * 0.5f;
+                    const float rcy = (renMin.y + renMax.y) * 0.5f;
+                    const float eh = 3.8f * s;
+                    const int pr = (int)(150 + (255 - 150) * dv);
+                    const int pg = (int)(120 + (170 - 120) * dv);
+                    const int pb = (int)(150 + (220 - 150) * dv);
+                    const ImU32 pcol = IM_COL32(pr, pg, pb, (int)(rowA * (0.5f + 0.5f * dv) * 255.0f));
+
+                    dl->AddLine(ImVec2(rcx - eh, rcy + eh), ImVec2(rcx + eh, rcy - eh), pcol, 1.5f * s);
+                    dl->AddCircleFilled(ImVec2(rcx - eh, rcy + eh), 1.0f * s, pcol, 6);
+                    dl->AddLine(ImVec2(rcx + eh, rcy - eh), ImVec2(rcx + eh - 2.5f * s, rcy - eh + 0.5f * s), pcol, 1.5f * s);
+                    dl->AddLine(ImVec2(rcx + eh, rcy - eh), ImVec2(rcx + eh - 0.5f * s, rcy - eh + 2.5f * s), pcol, 1.5f * s);
+                }
+
+                {
+                    const float dv = g_aimGroupDeleteHover[animIdx];
+                    const float dcx = (delMin.x + delMax.x) * 0.5f;
+                    const float dcy = (delMin.y + delMax.y) * 0.5f;
+                    const float xh = 5.0f * s;
+                    const int xr = (int)(150 + (255 - 150) * dv);
+                    const int xg = (int)(120 + (90 - 120) * dv);
+                    const int xb = (int)(130 + (100 - 130) * dv);
+                    const ImU32 xc = IM_COL32(xr, xg, xb, (int)(rowA * (0.5f + 0.5f * dv) * 255.0f));
+                    dl->AddLine(ImVec2(dcx - xh, dcy - xh), ImVec2(dcx + xh, dcy + xh), xc, 1.4f * s);
+                    dl->AddLine(ImVec2(dcx + xh, dcy - xh), ImVec2(dcx - xh, dcy + xh), xc, 1.4f * s);
+                }
+
+                if (g_aimGroupRowSel[animIdx] > 0.01f) {
+                    const float uH = 2.0f * s;
+                    const float uW = (tsz.x > 0.0f ? tsz.x : (rMax.x - rMin.x) * 0.4f) * g_aimGroupRowSel[animIdx];
+                    const float uY = rMax.y - uH - 1.0f * s;
+                    const float cx = (tsz.x > 0.0f) ? (tx + tsz.x * 0.5f) : ((rMin.x + rMax.x) * 0.5f);
+                    dl->AddRectFilled(
+                        ImVec2(cx - uW * 0.5f, uY),
+                        ImVec2(cx + uW * 0.5f, uY + uH),
+                        IM_COL32(189, 176, 255, (int)(g_aimGroupRowSel[animIdx] * rowA * 255.0f)),
+                        uH * 0.5f);
+                }
+
+                rowY += optRowH * g_aimGroupsExpandT;
+            }
+
+            {
+                const ImVec2 rMin(contentX + indent, rowY);
+                const ImVec2 rMax(max.x - pad, rowY + optRowH);
+
+                ImGui::SetCursorScreenPos(rMin);
+                ImGui::PushID(7400);
+                ImGui::InvisibleButton("##grp_create", ImVec2(rMax.x - rMin.x, optRowH));
+                ImGui::PopID();
+
+                const bool hov = ImGui::IsItemHovered();
+                g_aimCreateGroupHover += ((hov ? 1.0f : 0.0f) - g_aimCreateGroupHover) * kApproach;
+
+                if (ImGui::IsItemClicked(0)) {
+                    clickedCreate = true;
+                }
+
+                const float cv = g_aimCreateGroupHover;
+                if (cv > 0.005f) {
+                    dl->AddRectFilled(rMin, rMax,
+                        IM_COL32(120, 110, 180, (int)(rowA * 0.22f * cv * 255.0f)), 3.0f * s);
+                }
+
+                const char* txt = "+ Create New Group";
+                if (textFont) {
+                    const ImVec2 tsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, txt);
+                    const float tx = rMin.x + 8.0f * s;
+                    const float ty = rMin.y + (optRowH - tsz.y) * 0.5f;
+                    const int rC = (int)(150 + (235 - 150) * cv);
+                    const int gC = (int)(140 + (228 - 140) * cv);
+                    const int bC = (int)(205 + (255 - 205) * cv);
+                    dl->AddText(textFont, labelFs, ImVec2(floorf(tx + 0.5f), floorf(ty + 0.5f)),
+                        IM_COL32(rC, gC, bC, (int)(rowA * 255.0f)), txt);
+                }
+
+                rowY += optRowH * g_aimGroupsExpandT;
+            }
+
+            if (clickedDelete >= 0) {
+                Framework::PlayClickSound();
+                if (clickedDelete < (int)config.aim_groups.size()) {
+                    config.aim_groups.erase(config.aim_groups.begin() + clickedDelete);
+                    if (config.aim_current_edit == clickedDelete + 1) {
+                        config.aim_current_edit = 0;
+                    }
+                    else if (config.aim_current_edit > clickedDelete + 1) {
+                        config.aim_current_edit--;
+                    }
+                }
+            }
+            else if (clickedRename >= 0) {
+                Framework::PlayClickSound();
+                if (clickedRename < (int)config.aim_groups.size()) {
+                    g_aimGroupRenameIdx = clickedRename;
+                    snprintf(g_aimGroupRenameName, sizeof(g_aimGroupRenameName), "%s",
+                        config.aim_groups[clickedRename].name.c_str());
+                    g_aimGroupRenamePending = true;
+                }
+            }
+            else if (clickedSelect >= 0) {
+                Framework::PlayClickSound();
+                config.aim_current_edit = clickedSelect + 1;
+            }
+            else if (clickedCreate) {
+                Framework::PlayClickSound();
+                g_aimGroupCreateName[0] = '\0';
+                g_aimGroupCreatePending = true;
+            }
+        }
+
+        {
+            const float cy = rowY + rowH * 0.5f;
+            const char* lbl = "Weapons";
+            const ImVec2 lsz = textFont
+                ? textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, lbl)
+                : ImVec2(50.0f * s, labelFs);
+
+            if (textFont)
+                dl->AddText(textFont, labelFs,
+                    ImVec2(floorf(contentX + 0.5f), floorf(cy - lsz.y * 0.5f + 0.5f)),
+                    IM_COL32(200, 195, 235, (int)(alpha * 255.0f)), lbl);
+
+            const ImVec2 expC(contentX + lsz.x + expGap + iconSz * 0.5f, cy);
+            const float eh = iconSz * 0.75f;
+            const ImVec2 expMin(expC.x - eh, expC.y - eh);
+            const ImVec2 expMax(expC.x + eh, expC.y + eh);
+
+            const bool expHov = mouse.x >= expMin.x && mouse.x <= expMax.x
+                && mouse.y >= expMin.y && mouse.y <= expMax.y;
+
+            if (expHov && ImGui::IsMouseClicked(0)) {
+                Framework::PlayClickSound();
+                g_aimWeaponExpanded = !g_aimWeaponExpanded;
+            }
+
+            g_aimWeaponHover += ((expHov ? 1.0f : 0.0f) - g_aimWeaponHover) * kApproach;
+            g_aimWeaponExpandT += (((g_aimWeaponExpanded) ? 1.0f : 0.0f) - g_aimWeaponExpandT) * kApproach;
+
+            const int eR = (int)(150 + (189 - 150) * g_aimWeaponHover);
+            const int eG = (int)(140 + (176 - 140) * g_aimWeaponHover);
+            const int eB = (int)(205 + (255 - 205) * g_aimWeaponHover);
+            const ImU32 eCol = IM_COL32(eR, eG, eB, (int)(alpha * 255.0f));
+            DrawChevronLocal(dl, expC, iconSz, 1.5707963f * g_aimWeaponExpandT, eCol, 1.6f * s);
+
+            if (textFont) {
+                char hint[32];
+                if (config.aim_current_edit > 0 && config.aim_current_edit <= (int)config.aim_groups.size()) {
+                    const int wcount = (int)config.aim_groups[config.aim_current_edit - 1].weapons.size();
+                    snprintf(hint, sizeof(hint), "(%d)", wcount);
+                }
+                else {
+                    snprintf(hint, sizeof(hint), "(click to pick)");
+                }
+                const float mx = expMax.x + 6.0f * s;
+                const ImVec2 msz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, hint);
+                const float my = cy - msz.y * 0.5f;
+                dl->AddText(textFont, labelFs, ImVec2(floorf(mx + 0.5f), floorf(my + 0.5f)),
+                    IM_COL32(200, 190, 240, (int)(alpha * 255.0f)), hint);
+            }
+
+            rowY += rowH;
+        }
+
+        if (g_aimWeaponExpandT > 0.001f) {
+            const float rowA = alpha * g_aimWeaponExpandT;
+            const bool isShared = (config.aim_current_edit == 0);
+            const bool hasGroup = (!isShared && config.aim_current_edit <= (int)config.aim_groups.size());
+
+            int clickedIdx = -1;
+
+            for (int r = 0; r < kAimWeaponPresetCount; ++r) {
+                const ImVec2 rMin(contentX + indent, rowY);
+                const ImVec2 rMax(max.x - pad, rowY + optRowH);
+
+                ImGui::SetCursorScreenPos(rMin);
+                ImGui::PushID(7500 + r);
+                ImGui::InvisibleButton("##wp", ImVec2(rMax.x - rMin.x, optRowH));
+                ImGui::PopID();
+
+                const bool hov = ImGui::IsItemHovered();
+                const bool on = hasGroup && WeaponGroupHas(config.aim_groups[config.aim_current_edit - 1], kAimWeaponPreset[r]);
+
+                if (ImGui::IsItemClicked(0)) {
+                    clickedIdx = r;
+                }
+
+                g_aimWeaponCbHover[r] += ((hov ? 1.0f : 0.0f) - g_aimWeaponCbHover[r]) * kApproach;
+                g_aimWeaponCbSel[r] += (((on) ? 1.0f : 0.0f) - g_aimWeaponCbSel[r]) * kApproach;
+
+                const float hv = g_aimWeaponCbHover[r];
+                if (hv > 0.005f) {
+                    dl->AddRectFilled(rMin, rMax,
+                        IM_COL32(120, 110, 180, (int)(rowA * 0.15f * hv * 255.0f)),
+                        3.0f * s);
+                }
+
+                const ImVec2 cbMin(rMin.x, rowY + (optRowH - cbSize) * 0.5f);
+                drawCheckbox(cbMin, on, g_aimWeaponCbHover[r], g_aimWeaponExpandT);
+
+                if (textFont) {
+                    const ImVec2 tsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, kAimWeaponPreset[r]);
+                    const float tx = cbMin.x + cbSize + 8.0f * s;
+                    const float ty = rMin.y + (optRowH - tsz.y) * 0.5f;
+
+                    const float sv = on ? 1.0f : 0.0f;
+                    const float st = (sv > g_aimWeaponCbHover[r]) ? sv : g_aimWeaponCbHover[r];
+                    const int lr = (int)(190 + (235 - 190) * st);
+                    const int lg = (int)(185 + (228 - 185) * st);
+                    const int lb = (int)(215 + (255 - 215) * st);
+
+                    dl->AddText(textFont, labelFs,
+                        ImVec2(floorf(tx + 0.5f), floorf(ty + 0.5f)),
+                        IM_COL32(lr, lg, lb, (int)(rowA * 255.0f)), kAimWeaponPreset[r]);
+                }
+
+                rowY += optRowH * g_aimWeaponExpandT;
+            }
+
+            if (clickedIdx >= 0) {
+                Framework::PlayClickSound();
+                if (isShared) {
+                    const int foundIdx = FindGroupByName(kAimWeaponPreset[clickedIdx]);
+                    if (foundIdx >= 0) {
+                        config.aim_current_edit = foundIdx + 1;
+                    }
+                    else if ((int)config.aim_groups.size() < kMaxAimGroups) {
+                        AimWeaponGroup grp;
+                        grp.name = kAimWeaponPreset[clickedIdx];
+                        grp.settings = config.aim_shared;
+                        grp.weapons.push_back(kAimWeaponPreset[clickedIdx]);
+                        config.aim_groups.push_back(grp);
+                        config.aim_current_edit = (int)config.aim_groups.size();
+                    }
+                }
+                else if (hasGroup) {
+                    AimWeaponGroup& grp = config.aim_groups[config.aim_current_edit - 1];
+                    WeaponGroupToggle(grp, kAimWeaponPreset[clickedIdx]);
+                    if (grp.weapons.empty()) {
+                        config.aim_groups.erase(config.aim_groups.begin() + config.aim_current_edit - 1);
+                        config.aim_current_edit = 0;
+                    }
+                }
+            }
+        }
+
+        AimSettings* A = &config.CurrentAimEdit();
+
+        const bool wasCapturing = s_aimKeyCapture;
+        if (s_aimKeyCapture) {
+            if (s_aimKeyWaitRelease) {
+                if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+                    s_aimKeyWaitRelease = false;
+                }
+            }
+            else {
+                for (int vk = 1; vk < 256; ++vk) {
+                    if (GetAsyncKeyState(vk) & 0x8000) {
+                        A->key = (vk == VK_ESCAPE) ? 0 : vk;
+                        s_aimKeyCapture = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        {
+            const float cy = rowY + rowH * 0.5f;
             const ImVec2 cbMin(max.x - pad - cbSize, cy - cbSize * 0.5f);
             const ImVec2 cbMax(cbMin.x + cbSize, cbMin.y + cbSize);
 
@@ -774,13 +1262,13 @@ namespace GUI {
 
             if (hov && ImGui::IsMouseClicked(0)) {
                 Framework::PlayClickSound();
-                config.aim_enable = !config.aim_enable;
+                A->enable = !A->enable;
             }
 
             g_aimEnableHover += ((hov ? 1.0f : 0.0f) - g_aimEnableHover) * kApproach;
-            g_aimEnableSel += (((config.aim_enable) ? 1.0f : 0.0f) - g_aimEnableSel) * kApproach;
+            g_aimEnableSel += (((A->enable) ? 1.0f : 0.0f) - g_aimEnableSel) * kApproach;
 
-            drawCheckbox(cbMin, config.aim_enable, g_aimEnableHover, 1.0f);
+            drawCheckbox(cbMin, A->enable, g_aimEnableHover, 1.0f);
 
             if (textFont) {
                 const char* lbl = "Enable Aimbot";
@@ -828,7 +1316,7 @@ namespace GUI {
             DrawChevronLocal(dl, expC, iconSz, 1.5707963f * g_aimModeExpandT, eCol, 1.6f * s);
 
             static const char* modes[] = { "Toggle", "Hold", "Always" };
-            const char* mTxt = modes[config.aim_mode];
+            const char* mTxt = modes[A->mode];
             if (textFont) {
                 const float mx = expMax.x + 6.0f * s;
                 const ImVec2 msz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, mTxt);
@@ -857,7 +1345,7 @@ namespace GUI {
                 dl->AddRectFilled(kMin, kMax, IM_COL32(189, 176, 255, (int)(alpha * 0.2f * 255)), 3.0f * s);
 
             if (textFont) {
-                const char* kTxt = s_aimKeyCapture ? "..." : GetKeyName(config.aim_key);
+                const char* kTxt = s_aimKeyCapture ? "..." : GetKeyName(A->key);
                 const ImVec2 kSz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, kTxt);
                 const float ktx = kMin.x + (keyW - kSz.x) * 0.5f;
                 const float kty = kMin.y + (keyH - kSz.y) * 0.5f;
@@ -882,14 +1370,14 @@ namespace GUI {
                 ImGui::PopID();
 
                 const bool hov = ImGui::IsItemHovered();
-                const bool sel = (config.aim_mode == i);
+                const bool sel = (A->mode == i);
 
                 g_aimModeOptHover[i] += ((hov ? 1.0f : 0.0f) - g_aimModeOptHover[i]) * kApproach;
                 g_aimModeOptSel[i] += (((sel) ? 1.0f : 0.0f) - g_aimModeOptSel[i]) * kApproach;
 
                 if (ImGui::IsItemClicked(0)) {
                     Framework::PlayClickSound();
-                    config.aim_mode = i;
+                    A->mode = i;
                     g_aimModeExpanded = false;
                 }
 
@@ -951,12 +1439,12 @@ namespace GUI {
                 Widgets::Rect sr = {
                     ImVec2(sliderX, sliderY),
                     ImVec2(sliderX + sliderW, sliderY + 4.0f * s) };
-                Widgets::DrawDashedSlider(dl, sr, &config.aim_fov, 0.0f, 180.0f,
+                Widgets::DrawDashedSlider(dl, sr, &A->fov, 0.0f, 180.0f,
                     alpha, s, "##aim_fov_s");
             }
 
             char buf[16];
-            snprintf(buf, sizeof(buf), "%.0f", config.aim_fov);
+            snprintf(buf, sizeof(buf), "%.0f", A->fov);
             if (textFont) {
                 const float tw = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, buf).x;
                 dl->AddText(textFont, labelFs,
@@ -991,19 +1479,19 @@ namespace GUI {
 
             if (cbHov && ImGui::IsMouseClicked(0)) {
                 Framework::PlayClickSound();
-                config.aim_fov_visualize = !config.aim_fov_visualize;
+                A->fov_visualize = !A->fov_visualize;
             }
 
             g_aimFovVisHover += ((cbHov ? 1.0f : 0.0f) - g_aimFovVisHover) * kApproach;
-            g_aimFovVisSel += (((config.aim_fov_visualize) ? 1.0f : 0.0f) - g_aimFovVisSel) * kApproach;
+            g_aimFovVisSel += (((A->fov_visualize) ? 1.0f : 0.0f) - g_aimFovVisSel) * kApproach;
 
-            drawCheckbox(cbMin, config.aim_fov_visualize, g_aimFovVisHover, 1.0f);
+            drawCheckbox(cbMin, A->fov_visualize, g_aimFovVisHover, 1.0f);
 
             const bool colorHov = mouse.x >= colorMin.x && mouse.x <= colorMax.x
                 && mouse.y >= colorMin.y && mouse.y <= colorMax.y;
             g_aimFovVisColorHover += ((colorHov ? 1.0f : 0.0f) - g_aimFovVisColorHover) * kApproach;
 
-            const float* c = config.aim_fov_visualize_color;
+            const float* c = A->fov_visualize_color;
 
             const int bgA = (int)(alpha * 255.0f);
             dl->AddRectFilled(colorMin, colorMax, IM_COL32(16, 16, 16, bgA), cbRadius);
@@ -1029,7 +1517,7 @@ namespace GUI {
             PushPickerStyle(s);
             ImGui::PushItemWidth(150.0f * s);
             if (ImGui::BeginPopup("##aim_fovvis_color_popup")) {
-                ImGui::ColorPicker4("##aim_fovvis_color", config.aim_fov_visualize_color,
+                ImGui::ColorPicker4("##aim_fovvis_color", A->fov_visualize_color,
                     ImGuiColorEditFlags_AlphaBar
                     | ImGuiColorEditFlags_AlphaPreviewHalf
                     | ImGuiColorEditFlags_PickerHueBar
@@ -1053,13 +1541,13 @@ namespace GUI {
 
             if (hov && ImGui::IsMouseClicked(0)) {
                 Framework::PlayClickSound();
-                config.aim_visible_check = !config.aim_visible_check;
+                A->visible_check = !A->visible_check;
             }
 
             g_aimVisibleHover += ((hov ? 1.0f : 0.0f) - g_aimVisibleHover) * kApproach;
-            g_aimVisibleSel += (((config.aim_visible_check) ? 1.0f : 0.0f) - g_aimVisibleSel) * kApproach;
+            g_aimVisibleSel += (((A->visible_check) ? 1.0f : 0.0f) - g_aimVisibleSel) * kApproach;
 
-            drawCheckbox(cbMin, config.aim_visible_check, g_aimVisibleHover, 1.0f);
+            drawCheckbox(cbMin, A->visible_check, g_aimVisibleHover, 1.0f);
 
             if (textFont) {
                 const char* lbl = "Visible Check";
@@ -1107,7 +1595,7 @@ namespace GUI {
             DrawChevronLocal(dl, expC, iconSz, 1.5707963f * g_aimPrioExpandT, eCol, 1.6f * s);
 
             static const char* prios[] = { "Closest", "Head Priority", "Body Priority" };
-            const char* pTxt = prios[config.aim_hitbox_priority];
+            const char* pTxt = prios[A->hitbox_priority];
             if (textFont) {
                 const float mx = expMax.x + 6.0f * s;
                 const ImVec2 msz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, pTxt);
@@ -1133,14 +1621,14 @@ namespace GUI {
                 ImGui::PopID();
 
                 const bool hov = ImGui::IsItemHovered();
-                const bool sel = (config.aim_hitbox_priority == i);
+                const bool sel = (A->hitbox_priority == i);
 
                 g_aimPrioOptHover[i] += ((hov ? 1.0f : 0.0f) - g_aimPrioOptHover[i]) * kApproach;
                 g_aimPrioOptSel[i] += (((sel) ? 1.0f : 0.0f) - g_aimPrioOptSel[i]) * kApproach;
 
                 if (ImGui::IsItemClicked(0)) {
                     Framework::PlayClickSound();
-                    config.aim_hitbox_priority = i;
+                    A->hitbox_priority = i;
                     g_aimPrioExpanded = false;
                 }
 
@@ -1222,7 +1710,7 @@ namespace GUI {
             int selCount = 0;
             int firstSel = -1;
             for (int i = 0; i < 7; ++i) {
-                if (config.aim_hitbox & (1 << i)) {
+                if (A->hitbox & (1 << i)) {
                     if (firstSel < 0) firstSel = i;
                     selCount++;
                 }
@@ -1260,7 +1748,7 @@ namespace GUI {
                 const ImVec2 cbMin(max.x - pad - cbSize, rMin.y + (optRowH - cbSize) * 0.5f);
                 const ImVec2 cbMax(cbMin.x + cbSize, cbMin.y + cbSize);
 
-                const bool on = (config.aim_hitbox >> i) & 1;
+                const bool on = (A->hitbox >> i) & 1;
 
                 ImGui::SetCursorScreenPos(cbMin);
                 ImGui::PushID(2000 + i);
@@ -1270,8 +1758,8 @@ namespace GUI {
                 const bool hov = ImGui::IsItemHovered();
                 if (ImGui::IsItemClicked(0)) {
                     Framework::PlayClickSound();
-                    if (on) config.aim_hitbox &= ~(1 << i);
-                    else    config.aim_hitbox |= (1 << i);
+                    if (on) A->hitbox &= ~(1 << i);
+                    else    A->hitbox |= (1 << i);
                 }
 
                 g_aimHitboxHover[i] += ((hov ? 1.0f : 0.0f) - g_aimHitboxHover[i]) * kApproach;
@@ -1310,7 +1798,7 @@ namespace GUI {
             }
 
             char buf[16];
-            snprintf(buf, sizeof(buf), "%.0f", config.aim_smooth);
+            snprintf(buf, sizeof(buf), "%.0f", A->smooth);
             if (textFont) {
                 const float tw = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, buf).x;
                 dl->AddText(textFont, labelFs,
@@ -1326,15 +1814,116 @@ namespace GUI {
             Widgets::Rect sr = {
                 ImVec2(contentX, sliderTop),
                 ImVec2(contentX + contentW, sliderTop + 10.0f * s) };
-            Widgets::DrawDashedSlider(dl, sr, &config.aim_smooth, 0.0f, 100.0f,
+            Widgets::DrawDashedSlider(dl, sr, &A->smooth, 0.0f, 100.0f,
                 alpha, s, "##aim_smooth_s");
             rowY += 13.0f * s;
         }
+
+        if (g_aimGroupCreatePending) {
+            ImGui::OpenPopup("##aim_group_create");
+            g_aimGroupCreatePending = false;
+        }
+        if (g_aimGroupRenamePending) {
+            ImGui::OpenPopup("##aim_group_rename");
+            g_aimGroupRenamePending = false;
+        }
+
+        ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 7.0f * s);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f * s, 10.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f * s);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(9.0f * s, 6.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f * s, 7.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(0.0f, 0.0f));
+
+        ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.10f, 0.10f, 0.13f, 0.98f));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.741f, 0.690f, 1.0f, 0.35f));
+        ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.10f, 0.10f, 0.13f, 0.0f));
+        ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.10f, 0.10f, 0.13f, 0.0f));
+        ImGui::PushStyleColor(ImGuiCol_TitleBgCollapsed, ImVec4(0.10f, 0.10f, 0.13f, 0.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.16f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.16f, 0.15f, 0.22f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.18f, 0.17f, 0.26f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.88f, 0.86f, 1.0f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.18f, 0.28f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.25f, 0.38f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.35f, 0.30f, 0.48f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, ImVec4(0.0f, 0.0f, 0.0f, 0.45f));
+
+        const ImGuiWindowFlags modalFlags =
+            ImGuiWindowFlags_AlwaysAutoResize
+            | ImGuiWindowFlags_NoTitleBar
+            | ImGuiWindowFlags_NoSavedSettings
+            | ImGuiWindowFlags_NoMove;
+
+        const ImVec2 center(
+            min.x + (max.x - min.x) * 0.5f,
+            min.y + (max.y - min.y) * 0.5f);
+
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("##aim_group_create", nullptr, modalFlags)) {
+            if (textFont) ImGui::TextUnformatted("Create New Group");
+            ImGui::SetNextItemWidth(200.0f * s);
+            ImGui::InputTextWithHint("##grpname", "Group name...",
+                g_aimGroupCreateName, sizeof(g_aimGroupCreateName));
+
+            const bool atLimit = (int)config.aim_groups.size() >= kMaxAimGroups;
+            const bool valid = g_aimGroupCreateName[0] != '\0' && !atLimit;
+
+            ImGui::BeginDisabled(!valid);
+            if (ImGui::Button("Create", ImVec2(90.0f * s, 0))) {
+                AimWeaponGroup grp;
+                grp.name = g_aimGroupCreateName;
+                grp.settings = config.aim_shared;
+                config.aim_groups.push_back(grp);
+                config.aim_current_edit = (int)config.aim_groups.size();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndDisabled();
+
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(90.0f * s, 0))) {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("##aim_group_rename", nullptr, modalFlags)) {
+            if (textFont) ImGui::TextUnformatted("Rename Group");
+            ImGui::SetNextItemWidth(200.0f * s);
+            ImGui::InputTextWithHint("##grprnm", "Group name...",
+                g_aimGroupRenameName, sizeof(g_aimGroupRenameName));
+
+            const bool idxOk = g_aimGroupRenameIdx >= 0
+                && g_aimGroupRenameIdx < (int)config.aim_groups.size();
+            const bool valid = g_aimGroupRenameName[0] != '\0' && idxOk;
+
+            ImGui::BeginDisabled(!valid);
+            if (ImGui::Button("Rename", ImVec2(90.0f * s, 0))) {
+                config.aim_groups[g_aimGroupRenameIdx].name = g_aimGroupRenameName;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndDisabled();
+
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(90.0f * s, 0))) {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+
+        ImGui::PopStyleColor(13);
+        ImGui::PopStyleVar(7);
     }
 
     static void DrawHumanizeCard(ImDrawList* dl, ImVec2 min, ImVec2 max,
         float alpha, float s, ImFont* textFont, float labelFs, float dt)
     {
+        AimSettings* A = &config.CurrentAimEdit();
+
         const float pad = 14.0f * s;
         const float rowH = 24.0f * s;
         const float optRowH = 22.0f * s;
@@ -1367,15 +1956,7 @@ namespace GUI {
 
         float rowY = min.y + pad;
 
-        if (textFont) {
-            dl->AddText(textFont, labelFs * 1.05f,
-                ImVec2(contentX, rowY - 2.0f * s),
-                IM_COL32(200, 195, 235, (int)(alpha * 255.0f)),
-                "Humanization");
-        }
-        rowY += labelFs * 1.05f + 6.0f * s;
-
-        const bool masterOn = config.aim_humanize_enable;
+        const bool masterOn = A->humanize_enable;
         const float masterDim = masterOn ? 1.0f : 0.6f;
 
         {
@@ -1388,19 +1969,20 @@ namespace GUI {
 
             if (hov && ImGui::IsMouseClicked(0)) {
                 Framework::PlayClickSound();
-                config.aim_humanize_enable = !config.aim_humanize_enable;
+                A->humanize_enable = !A->humanize_enable;
             }
 
             g_humEnableHover += ((hov ? 1.0f : 0.0f) - g_humEnableHover) * kApproach;
-            g_humEnableSel += (((config.aim_humanize_enable) ? 1.0f : 0.0f) - g_humEnableSel) * kApproach;
+            g_humEnableSel += (((A->humanize_enable) ? 1.0f : 0.0f) - g_humEnableSel) * kApproach;
 
-            drawCheckbox(cbMin, config.aim_humanize_enable, g_humEnableHover, 1.0f);
+            drawCheckbox(cbMin, A->humanize_enable, g_humEnableHover, 1.0f);
 
             if (textFont) {
-                const ImVec2 lsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, "Enable");
+                const char* lbl = "Enable Humanization";
+                const ImVec2 lsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, lbl);
                 const float ly = cy - lsz.y * 0.5f;
                 dl->AddText(textFont, labelFs, ImVec2(contentX, ly),
-                    IM_COL32(200, 195, 235, (int)(alpha * 255.0f)), "Enable");
+                    IM_COL32(200, 195, 235, (int)(alpha * 255.0f)), lbl);
             }
             rowY += rowH;
         }
@@ -1415,40 +1997,40 @@ namespace GUI {
             switch (fi) {
             case 0:
                 fname = "Randomize Smooth";
-                fEnable = &config.aim_humanize_rand_smooth;
-                s1 = &config.aim_humanize_smooth_min; s1min = 0.0f; s1max = 100.0f; s1label = "Min";
-                s2 = &config.aim_humanize_smooth_max; s2min = 0.0f; s2max = 100.0f; s2label = "Max";
+                fEnable = &A->humanize_rand_smooth;
+                s1 = &A->humanize_smooth_min; s1min = 0.0f; s1max = 100.0f; s1label = "Min";
+                s2 = &A->humanize_smooth_max; s2min = 0.0f; s2max = 100.0f; s2label = "Max";
                 twoSliders = true;
                 break;
             case 1:
                 fname = "Microjitter";
-                fEnable = &config.aim_humanize_jitter;
-                s1 = &config.aim_humanize_jitter_amount; s1min = 0.0f; s1max = 20.0f; s1label = "Amount";
+                fEnable = &A->humanize_jitter;
+                s1 = &A->humanize_jitter_amount; s1min = 0.0f; s1max = 20.0f; s1label = "Amount";
                 break;
             case 2:
                 fname = "Overshoot";
-                fEnable = &config.aim_humanize_overshoot;
-                s1 = &config.aim_humanize_overshoot_min; s1min = 0.0f; s1max = 50.0f; s1label = "Min";
-                s2 = &config.aim_humanize_overshoot_max; s2min = 0.0f; s2max = 50.0f; s2label = "Max";
+                fEnable = &A->humanize_overshoot;
+                s1 = &A->humanize_overshoot_min; s1min = 0.0f; s1max = 50.0f; s1label = "Min";
+                s2 = &A->humanize_overshoot_max; s2min = 0.0f; s2max = 50.0f; s2label = "Max";
                 twoSliders = true;
                 break;
             case 3:
                 fname = "Undershoot";
-                fEnable = &config.aim_humanize_undershoot;
-                s1 = &config.aim_humanize_undershoot_min; s1min = 0.0f; s1max = 50.0f; s1label = "Min";
-                s2 = &config.aim_humanize_undershoot_max; s2min = 0.0f; s2max = 50.0f; s2label = "Max";
+                fEnable = &A->humanize_undershoot;
+                s1 = &A->humanize_undershoot_min; s1min = 0.0f; s1max = 50.0f; s1label = "Min";
+                s2 = &A->humanize_undershoot_max; s2min = 0.0f; s2max = 50.0f; s2label = "Max";
                 twoSliders = true;
                 break;
             case 4:
                 fname = "Aim Curve";
-                fEnable = &config.aim_humanize_curve;
-                s1 = &config.aim_humanize_curve_amount; s1min = 0.0f; s1max = 1.0f; s1label = "Amount"; s1fmt = "%.2f";
+                fEnable = &A->humanize_curve;
+                s1 = &A->humanize_curve_amount; s1min = 0.0f; s1max = 1.0f; s1label = "Amount"; s1fmt = "%.2f";
                 break;
             case 5:
                 fname = "Reaction Delay";
-                fEnable = &config.aim_humanize_reaction_enable;
-                s1 = &config.aim_humanize_reaction_min; s1min = 0.0f; s1max = 500.0f; s1label = "Min"; s1fmt = "%.0f ms";
-                s2 = &config.aim_humanize_reaction_max; s2min = 0.0f; s2max = 500.0f; s2label = "Max"; s2fmt = "%.0f ms";
+                fEnable = &A->humanize_reaction_enable;
+                s1 = &A->humanize_reaction_min; s1min = 0.0f; s1max = 500.0f; s1label = "Min"; s1fmt = "%.0f ms";
+                s2 = &A->humanize_reaction_max; s2min = 0.0f; s2max = 500.0f; s2label = "Max"; s2fmt = "%.0f ms";
                 twoSliders = true;
                 break;
             }
@@ -2457,9 +3039,9 @@ namespace GUI {
 
         if (!s_aimDefaultsApplied) {
             s_aimDefaultsApplied = true;
-            if (config.aim_key == 0 && config.aim_mode == 0) {
-                config.aim_key = VK_LBUTTON;
-                config.aim_mode = 1;
+            if (config.aim_shared.key == 0 && config.aim_shared.mode == 0) {
+                config.aim_shared.key = VK_LBUTTON;
+                config.aim_shared.mode = 1;
             }
         }
 
@@ -2594,8 +3176,8 @@ namespace GUI {
             && g_activeTab == 1
             && (g_activeSub[1] == 0 || g_activeSub[1] == 1);
 
-        const bool showConfigCards = (a > 0.5f) && g_activeTab == 3;
-        const bool showSystemCard = (a > 0.5f) && g_activeTab == 4;
+        const bool showSystemCard = (a > 0.5f) && g_activeTab == 3;
+        const bool showConfigCards = (a > 0.5f) && g_activeTab == 4;
 
         ImFont* font = io.FontDefault ? io.FontDefault : ImGui::GetFont();
         const float labelFs = 15.0f * s;

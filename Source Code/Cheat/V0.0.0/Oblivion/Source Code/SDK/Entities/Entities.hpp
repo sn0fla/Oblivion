@@ -48,6 +48,14 @@ struct FrameEntity {
     int32_t ping = 0;
     int32_t ammo = 0;
     int32_t reserve = 0;
+
+    mutable bool  boxCached = false;
+    mutable bool  boxValid = false;
+    mutable float boxL = 0.0f;
+    mutable float boxT = 0.0f;
+    mutable float boxR = 0.0f;
+    mutable float boxB = 0.0f;
+    mutable float boxCx = 0.0f;
 };
 
 struct FrameSnapshot {

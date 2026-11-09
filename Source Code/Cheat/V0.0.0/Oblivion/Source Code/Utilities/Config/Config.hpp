@@ -16,37 +16,69 @@ struct ConfigBrowser {
 
 extern ConfigBrowser configBrowser;
 
+struct AimSettings {
+    bool  enable = false;
+    int   mode = 0;
+    int   key = 0;
+    float fov = 180.0f;
+    int   hitbox = 1;
+    int   hitbox_priority = 0;
+    float smooth = 50.0f;
+    bool  visible_check = false;
+    bool  fov_visualize = false;
+    float fov_visualize_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+    bool  humanize_enable = false;
+    bool  humanize_rand_smooth = false;
+    float humanize_smooth_min = 30.0f;
+    float humanize_smooth_max = 70.0f;
+    bool  humanize_jitter = false;
+    float humanize_jitter_amount = 1.5f;
+    bool  humanize_overshoot = false;
+    float humanize_overshoot_min = 5.0f;
+    float humanize_overshoot_max = 15.0f;
+    bool  humanize_undershoot = false;
+    float humanize_undershoot_min = 5.0f;
+    float humanize_undershoot_max = 15.0f;
+    bool  humanize_curve = false;
+    float humanize_curve_amount = 0.5f;
+    bool  humanize_reaction_enable = false;
+    float humanize_reaction_min = 120.0f;
+    float humanize_reaction_max = 280.0f;
+};
+
+struct AimWeaponGroup {
+    std::string name;
+    std::vector<std::string> weapons;
+    AimSettings settings;
+};
+
 struct Config {
     bool show_menu = false;
 
-    bool  aim_enable = false;
-    int   aim_mode = 0;
-    int   aim_key = 0;
-    float aim_fov = 180.0f;
-    int   aim_hitbox = 1;
-    int   aim_hitbox_priority = 0;
-    float aim_smooth = 50.0f;
-    bool  aim_visible_check = false;
-    bool  aim_fov_visualize = false;
-    float aim_fov_visualize_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    AimSettings aim_shared;
+    std::vector<AimWeaponGroup> aim_groups;
+    int aim_current_edit = 0;
 
-    bool  aim_humanize_enable = false;
-    bool  aim_humanize_rand_smooth = false;
-    float aim_humanize_smooth_min = 30.0f;
-    float aim_humanize_smooth_max = 70.0f;
-    bool  aim_humanize_jitter = false;
-    float aim_humanize_jitter_amount = 1.5f;
-    bool  aim_humanize_overshoot = false;
-    float aim_humanize_overshoot_min = 5.0f;
-    float aim_humanize_overshoot_max = 15.0f;
-    bool  aim_humanize_undershoot = false;
-    float aim_humanize_undershoot_min = 5.0f;
-    float aim_humanize_undershoot_max = 15.0f;
-    bool  aim_humanize_curve = false;
-    float aim_humanize_curve_amount = 0.5f;
-    bool  aim_humanize_reaction_enable = false;
-    float aim_humanize_reaction_min = 120.0f;
-    float aim_humanize_reaction_max = 280.0f;
+    AimSettings& CurrentAimEdit() {
+        if (aim_current_edit < 0) aim_current_edit = 0;
+        if (aim_current_edit > (int)aim_groups.size()) aim_current_edit = 0;
+        if (aim_current_edit == 0) return aim_shared;
+        return aim_groups[aim_current_edit - 1].settings;
+    }
+    const AimSettings& CurrentAimEdit() const {
+        int idx = aim_current_edit;
+        if (idx <= 0 || idx > (int)aim_groups.size()) return aim_shared;
+        return aim_groups[idx - 1].settings;
+    }
+
+    bool AimbotNeedsBones() const {
+        if (aim_shared.enable && aim_shared.hitbox != 0) return true;
+        for (const auto& g : aim_groups) {
+            if (g.settings.enable && g.settings.hitbox != 0) return true;
+        }
+        return false;
+    }
 
     bool esp_enemy_enable = false;
     bool esp_enemy_box = false;
