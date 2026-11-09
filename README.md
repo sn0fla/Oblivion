@@ -42,7 +42,7 @@
 
 ## 🧠 About
 
-**Oblivion** is a modern external cheat and overlay for **Counter-Strike 2**. It uses a lightweight DirectComposition + DirectX 11 overlay with a fully custom ImGui menu, advanced memory reading through NT syscalls, handle hijacking, and a double-buffered entity snapshot system for smooth, high-performance ESP.
+**Oblivion** is a modern external cheat and overlay for **Counter-Strike 2**. It uses a lightweight DirectComposition + DirectX 11 overlay with a fully custom ImGui menu, advanced memory reading through indirect NT syscalls, handle hijacking, and a **cached entity snapshot system** with per-player slot reuse for smooth, high-performance ESP. <!-- UPDATED: removed "double-buffered" claim; the code uses a single-buffer build with a persistent slot cache -->
 
 The project is designed for **external use only** — no injection required. It reads game memory from outside the process and renders everything on a transparent, topmost overlay.
 
@@ -62,7 +62,9 @@ The project is designed for **external use only** — no injection required. It 
 | **Show FOV** | Circular/elliptical on-screen FOV indicator derived from the view matrix, with full RGBA color picker |
 | **Visible Check** | Only target players the local player can actually see (`m_entitySpottedState`) |
 | **Hitbox Selection** | Independently toggleable: Head, Neck, Chest, Stomach, Arms, Legs, Feet |
-| **Smooth Slider** | 0–100 aim smoothing |
+| **Hitbox Priority** | Closest / Head Priority / Body Priority |
+| **Weapon Groups** | Per-weapon aim profiles (33 weapon presets, up to 32 custom groups) |
+| **Smooth Slider** | 0–100 aim smoothing with min-jerk velocity curve and burst-mode velocity floor |
 | **Auto-Calibration** | Learns your in-game sensitivity on the fly by comparing sent mouse deltas to observed view-angle changes |
 
 Aim output uses indirect syscalls (`NtUserSendInput` via a generated syscall stub with spoofed return addresses) so mouse input isn't generated from the cheat module itself.
@@ -70,13 +72,16 @@ Aim output uses indirect syscalls (`NtUserSendInput` via a generated syscall stu
 ### 🎯 Humanization
 A dedicated **Humanization** card sits next to the Aimbot card and can shape the aim path to look less mechanical. All sub-features are gated behind a single master **Enable** toggle:
 
+<!-- UPDATED: added Reaction Delay row; corrected overshoot/undershoot/curve descriptions to match code behavior -->
+
 | Feature | Description |
 |---------|-------------|
 | **Randomize Smooth** | Re-rolls the smoothing value every tick between a configurable Min/Max range |
-| **Microjitter** | Adds per-tick random pixel offset (±amount) to the outgoing mouse delta |
-| **Overshoot** | Multiplies the aim step by a random 1.0–1.5× factor so the crosshair slightly leads the target |
-| **Undershoot** | Multiplies the aim step by a random 0.5–1.0× factor so the crosshair slightly lags the target |
-| **Aim Curve** | Rotates the aim delta by a random ±per-burst angle to produce a curved, arc-like motion instead of a straight line |
+| **Microjitter** | Adds per-tick pseudo-noise pixel offset (`ValueNoise` on top of a random seed) to the outgoing mouse delta |
+| **Overshoot** | Adds a random percentage of the current aim magnitude (Min–Max %) as a forward offset, so the crosshair slightly leads the target |
+| **Undershoot** | Subtracts a random percentage of the current aim magnitude (Min–Max %) so the crosshair slightly lags the target |
+| **Aim Curve** | Rotates the aim delta by a per-burst angle (up to ~28°) — the direction is rolled once per burst — producing a curved, arc-like motion instead of a straight line |
+| **Reaction Delay** | Adds a random per-target delay (Min–Max ms) before the aimbot engages a newly acquired target |
 
 ### 🎯 Visuals / ESP
 | Feature | Description |
@@ -111,7 +116,7 @@ Every element has its **own color picker** and separate settings for **Enemy** a
 - No injection — external overlay only
 - Handle hijacking from trusted processes (Steam, explorer, dwm, etc.) instead of direct `OpenProcess`
 - Indirect NT syscalls with spoofed return addresses for memory reads/writes
-- External read-only snapshot system (`ReadRaw` batch reads, coalesced multi-field reads per entity)
+- Batched `ReadRaw` reads with a per-player slot cache to minimize syscall churn
 - **Streamproof mode** — uses `WDA_EXCLUDEFROMCAPTURE` (with `WDA_MONITOR` fallback) so the overlay is invisible in OBS / captures
 - String obfuscation via compile-time Xorstr
 
@@ -125,11 +130,13 @@ Every element has its **own color picker** and separate settings for **Enemy** a
 - Keybind: `INSERT` to toggle menu
 
 ### 🧩 Menu Layout
-- **Aimbot** → Aimbot (functional), Humanization (functional), Triggerbot, Recoil *(UI placeholders)*
-- **Visuals** → Enemy, Team (functional), Local, World *(UI placeholders)*
+<!-- UPDATED: System and Configs tab order corrected to match GUI.cpp (tab 3 = System, tab 4 = Configs) -->
+
+- **Aimbot** → Aimbot (functional), Humanization (functional), Triggerbot *(placeholder)*, Recoil *(placeholder)*
+- **Visuals** → Enemy, Team (functional), Local *(placeholder)*, World *(placeholder)*
 - **Settings** *(placeholder)*
-- **Configs** → Full config browser with actions panel
 - **System** → Safemode, VSync, Allow Tearing, Fullscreen Mode, Streamproof, Unload
+- **Configs** → Full config browser with actions panel
 
 > ℹ️ Tabs marked *placeholder* are visible in the UI but have no backend logic yet.
 
@@ -194,12 +201,13 @@ Every element has its **own color picker** and separate settings for **Enemy** a
 | `INSERT` | Toggle menu (interactive / non-interactive) |
 | Mouse | Navigate menu / drag by the header |
 
-**Menu tabs:**
-- **Aimbot** — Aimbot, Humanization, Triggerbot *(placeholder)*, Recoil *(placeholder)*
-- **Visuals** — Enemy / Team / Local *(placeholder)* / World *(placeholder)* ESP settings
-- **Settings** — *(placeholder)*
-- **Configs** — Create, save, load, delete, refresh, and browse `.ini` configs
-- **System** — Safemode toggle, VSync, Allow Tearing, Fullscreen Mode, Streamproof, Unload
+**Menu tabs** (left → right): <!-- UPDATED: System now listed before Configs to match actual tab indices -->
+
+1. **Aimbot** — Aimbot, Humanization, Triggerbot *(placeholder)*, Recoil *(placeholder)*
+2. **Visuals** — Enemy, Team, Local *(placeholder)*, World *(placeholder)*
+3. **Settings** — *(placeholder)*
+4. **System** — Safemode, VSync, Allow Tearing, Fullscreen Mode, Streamproof, Unload
+5. **Configs** — Create, save, load, delete, refresh, and browse `.ini` configs
 
 > ⚠️ There is **no separate END hotkey** in the current build — the cheat is unloaded via the **System → Unload** button (with confirmation popup).
 
@@ -208,189 +216,3 @@ Every element has its **own color picker** and separate settings for **Enemy** a
 ## ⚙️ Configuration
 
 Configurations are stored as `.ini` files in:
-
-```
-C:\Oblivion\Configurations\
-```
-
-You can:
-- Create new configs
-- Save current settings to the selected config (with overwrite confirmation)
-- Load an existing config (with confirmation)
-- Delete a config (with confirmation)
-- Refresh the file list
-- Open the config folder directly from the UI
-- Search configs by name
-
-The **Aimbot** section also stores:
-- Mode (Toggle / Hold / Always)
-- Key selection via key-capture button
-- FOV, Hitbox mask, Smooth value
-- FOV visualize toggle + color
-- Visible check
-- Humanization master + all sub-feature toggles and range sliders
-
-> ℹ️ Config files store all ESP elements, colors, flags, offscreen settings, display settings (VSync / tearing / fullscreen), safe-mode preference, safe-mode warning suppression, and streamproof state.
-
----
-
-## 📁 Project Structure
-
-```
-Oblivion/
-├── Core/
-│   ├── Memory/           # NT syscall stubs, handle hijacking, PEB module walk
-│   └── Overlay/          # DComp + D3D11 + ImGui overlay, swapchain handling,
-│                         # UIAccess elevation for fullscreen mode
-├── SDK/
-│   ├── Entities/         # Cached controller/pawn scan + double-buffered frame snapshot
-│   ├── Offsets/          # CS2 offsets
-│   └── Schemas/          # Schema dumps (client_dll, etc.)
-├── Features/
-│   ├── Combat/
-│   │   └── Aimbot/       # Mouse-delta aimbot via indirect NtUserSendInput,
-│   │                     # auto-calibration, humanization
-│   └── Visuals/
-│       └── Player/
-│           └── ESP/      # Box, Skeleton, Healthbar, Nametag, Distance,
-│                         # HeadCircle, Snapline, ViewDirection, Weapon,
-│                         # Flags, Offscreen
-├── UI/
-│   ├── Framework/        # Shared ImGui helpers, icon font, click sounds,
-│   │                     # flow-line pulse drawing
-│   ├── Header/           # Animated menu header (flow-line pulse, icon tabs,
-│   │                     # animated sub-tab strip)
-│   ├── Cards/            # Aimbot / Humanize / ESP / Config / System cards
-│   ├── Widgets/          # ESP card layout, dashed sliders, checkbox drawing
-│   ├── Animations/       # Boot animation (blur-in, text glow, fade-out)
-│   └── Stars/            # Multi-layer animated starfield background
-├── Utilities/
-│   ├── Config/           # INI config system + config browser state
-│   ├── Logging/          # Log rotation, crash handler (minidump + stack walk),
-│   │                     # latency sample buckets
-│   └── Maths/            # Vector math, WorldToScreen, angle calculations
-│       └── Vectors/      # Vector2, Vector3, ViewMatrix
-└── External/
-    ├── ImGUI/            # ImGui library
-    └── Xorstr/           # Compile-time string obfuscation
-```
-
----
-
-## 🛡️ Safe Mode & Streamproof
-
-### Safe Mode
-
-**Safe Mode** is enabled by default. When active:
-- All memory writes are blocked (via `g_AllowMemoryWrite`)
-- ESP, overlay, and aimbot still function (aimbot uses mouse input, not memory writes)
-- Any future write-based features will be disabled
-
-To disable Safe Mode:
-1. Open the menu → **System** tab.
-2. Toggle **Safemode** off.
-3. Read the warning and confirm — or check **"Do not remind me again"** to disable the warning permanently (this preference is stored in the config).
-
-> ⚠️ Disabling Safe Mode allows the cheat to modify game memory. Use at your own risk.
-
-### Streamproof
-
-The **Streamproof** toggle (System tab) sets the overlay window's display affinity to `WDA_EXCLUDEFROMCAPTURE`, which hides it from OBS, Discord, Xbox Game Bar, and most screen capture APIs. If the OS rejects that flag it falls back to `WDA_MONITOR` (window appears as a black rectangle in captures).
-
-### Fullscreen Mode / UIAccess
-
-The **Fullscreen Mode** toggle attempts to elevate the cheat to the `UIAccess` integrity level by duplicating the token of `osk.exe` (On-Screen Keyboard). This allows the overlay to stay topmost over exclusive-fullscreen games without stealing focus. The current process relaunches itself with a `--ui-active` flag once the new token is acquired. If elevation fails, the cheat continues running at its current integrity level.
-
----
-
-## 🧰 Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| Menu doesn't open | Run as Administrator, check `INSERT` key, run CS2 in fullscreen windowed |
-| ESP not showing | Make sure CS2 is running and you're in a match, run CS2 in fullscreen windowed |
-| Game crashes | Check `C:\Oblivion\Logs\` for the latest `.log` and `.dmp` — attach to a Discord report |
-| Overlay flickers | Disable fullscreen optimizations in CS2 properties, or toggle VSync / Allow Tearing |
-| Config not saving | Check folder permissions for `C:\Oblivion\Configurations` |
-| Aimbot overshoots / undershoots | Adjust Smooth value, or let auto-calibration re-learn by moving the mouse a few times; tune Humanization ranges |
-| Menu doesn't respond to input | Make sure overlay is interactive (it is while the menu is open) |
-| Overlay disappears in OBS | Enable **Streamproof** in the System tab |
-| Overlay won't stay on top of fullscreen game | Enable **Fullscreen Mode** in the System tab (requires Admin) |
-| Cheat closes on its own | Look for `cs2.exe exited` in the log — the cheat monitors the game process and shuts down when it closes |
-
-> Still stuck? **Join the Discord** for instant support.
-
----
-
-## ❓ FAQ
-
-**Q: Is this detected?**
-A: We cannot guarantee safety, but currently it's undetected. Always use at your own risk. Safe Mode reduces risk.
-
-**Q: Does it work on Faceit / ESEA?**
-A: No. This is for official CS2 servers only.
-
-**Q: Do I need to inject?**
-A: No. It's fully external — a transparent DirectComposition overlay + external memory reads.
-
-**Q: How do I get the cheat?**
-A: Join our Discord → [https://discord.gg/DQXRjR6FhW](https://discord.gg/DQXRjR6FhW)
-
-**Q: Is it free?**
-A: Yes, Oblivion is completely free.
-
-**Q: Is bunnyhop included?**
-A: No. The current build focuses on ESP, aimbot, and humanization.
-
-**Q: Why are some tabs empty?**
-A: Triggerbot, Recoil, Local ESP, World ESP, and the Settings tab are UI placeholders reserved for future features.
-
-**Q: What's the difference between Safe Mode and Streamproof?**
-A: **Safe Mode** blocks memory writes. **Streamproof** hides the overlay from screen captures. They are independent and can be combined.
-
-**Q: What does Fullscreen Mode do?**
-A: It relaunches the cheat with a duplicated `UIAccess` token from `osk.exe` so the overlay can render on top of exclusive-fullscreen games without stealing focus.
-
-**Q: What is Humanization for?**
-A: It makes the aimbot's mouse movement look less robotic by randomizing smoothing, adding jitter, overshooting/undershooting, and curving the aim path. Each component has its own toggle and range sliders, plus a master enable.
-
-**Q: How does auto-calibration work?**
-A: Every time the aimbot sends a mouse delta, the cheat records the view angles before the send. On the next tick it compares them to the new angles to learn the current degrees-per-pixel ratio. This adapts automatically if you change your in-game sensitivity.
-
----
-
-## ⚠️ Disclaimer
-
-This project is for **educational purposes only**.
-The developers are **not responsible** for any bans, account suspensions, or damages caused by using this software.
-Cheating in online games violates the Terms of Service of Valve and Steam.
-**Use at your own risk.**
-
----
-
-## 💬 Join the Community
-
-<p align="center">
-  <a href="https://discord.gg/DQXRjR6FhW">
-    <img src="https://img.shields.io/badge/Discord-Join%20Now-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord">
-  </a>
-</p>
-
-**Why join?**
-- ✅ Download the latest cheat build
-- ✅ Get help with setup and troubleshooting
-- ✅ Request features and report bugs
-- ✅ Stay updated with new releases
-- ✅ Connect with other users
-
-> 🔗 **Discord Invite:** [https://discord.gg/DQXRjR6FhW](https://discord.gg/DQXRjR6FhW)
-
----
-
-<p align="center">
-  <strong>Oblivion</strong> — Elevate your CS2 experience.
-</p>
-
-<p align="center">
-  Made with ❤️ by the Oblivion Team
-</p>
