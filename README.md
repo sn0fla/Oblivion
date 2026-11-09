@@ -30,6 +30,7 @@
   - [Installation](#installation)
   - [Building from Source](#building-from-source)
 - [Usage](#-usage)
+- [Per-Weapon Config (Weapon Groups)](#-per-weapon-config-weapon-groups)
 - [Configuration](#-configuration)
 - [Project Structure](#-project-structure)
 - [Safe Mode & Streamproof](#-safe-mode--streamproof)
@@ -42,7 +43,7 @@
 
 ## 🧠 About
 
-**Oblivion** is a modern external cheat and overlay for **Counter-Strike 2**. It uses a lightweight DirectComposition + DirectX 11 overlay with a fully custom ImGui menu, advanced memory reading through indirect NT syscalls, handle hijacking, and a **cached entity snapshot system** with per-player slot reuse for smooth, high-performance ESP. <!-- UPDATED: removed "double-buffered" claim; the code uses a single-buffer build with a persistent slot cache -->
+**Oblivion** is a modern external cheat and overlay for **Counter-Strike 2**. It uses a lightweight DirectComposition + DirectX 11 overlay with a fully custom ImGui menu, advanced memory reading through indirect NT syscalls, handle hijacking, and a **cached entity snapshot system** with per-player slot reuse for smooth, high-performance ESP.
 
 The project is designed for **external use only** — no injection required. It reads game memory from outside the process and renders everything on a transparent, topmost overlay.
 
@@ -63,7 +64,7 @@ The project is designed for **external use only** — no injection required. It 
 | **Visible Check** | Only target players the local player can actually see (`m_entitySpottedState`) |
 | **Hitbox Selection** | Independently toggleable: Head, Neck, Chest, Stomach, Arms, Legs, Feet |
 | **Hitbox Priority** | Closest / Head Priority / Body Priority |
-| **Weapon Groups** | Per-weapon aim profiles (33 weapon presets, up to 32 custom groups) |
+| **Weapon Groups** | Per-weapon aim profiles (33 weapon presets, up to 32 custom groups) — see [Per-Weapon Config](#-per-weapon-config-weapon-groups) |
 | **Smooth Slider** | 0–100 aim smoothing with min-jerk velocity curve and burst-mode velocity floor |
 | **Auto-Calibration** | Learns your in-game sensitivity on the fly by comparing sent mouse deltas to observed view-angle changes |
 
@@ -71,8 +72,6 @@ Aim output uses indirect syscalls (`NtUserSendInput` via a generated syscall stu
 
 ### 🎯 Humanization
 A dedicated **Humanization** card sits next to the Aimbot card and can shape the aim path to look less mechanical. All sub-features are gated behind a single master **Enable** toggle:
-
-<!-- UPDATED: added Reaction Delay row; corrected overshoot/undershoot/curve descriptions to match code behavior -->
 
 | Feature | Description |
 |---------|-------------|
@@ -130,7 +129,6 @@ Every element has its **own color picker** and separate settings for **Enemy** a
 - Keybind: `INSERT` to toggle menu
 
 ### 🧩 Menu Layout
-<!-- UPDATED: System and Configs tab order corrected to match GUI.cpp (tab 3 = System, tab 4 = Configs) -->
 
 - **Aimbot** → Aimbot (functional), Humanization (functional), Triggerbot *(placeholder)*, Recoil *(placeholder)*
 - **Visuals** → Enemy, Team (functional), Local *(placeholder)*, World *(placeholder)*
@@ -158,19 +156,19 @@ Every element has its **own color picker** and separate settings for **Enemy** a
 
 - **Windows 10 / 11** (64-bit)
 - **Counter-Strike 2** installed via Steam
-- **Visual Studio 2022** with C++20 (for building)
+- **Visual Studio 2022** with C++20 (for building from source)
 - **DirectX 11** runtime
 - Administrator privileges (for memory access and handle hijacking)
 
 ### Installation
 
-1. **Join our Discord** → [https://discord.gg/DQXRjR6FhW](https://discord.gg/DQXRjR6FhW)
-2. Go to the **#downloads** channel.
-3. Download the latest `Oblivion.zip`.
-4. Extract the archive to a folder of your choice.
-5. Run `Oblivion.exe` as **Administrator**.
-6. Launch **Counter-Strike 2**.
-7. Press `INSERT` to open the menu.
+> 📥 **Head over to the `#downloads` channel in our Discord and follow the instructions there.**
+> **👉 [https://discord.gg/DQXRjR6FhW](https://discord.gg/DQXRjR6FhW)**
+
+Once you've got the build:
+1. Run `Oblivion.exe` as **Administrator**.
+2. Launch **Counter-Strike 2**.
+3. Press `INSERT` to open the menu.
 
 > ⚠️ **Important:** Always run the cheat before launching CS2 for best results.
 > If CS2 is already running, the cheat will attach automatically (and will auto-launch CS2 via `steam://rungameid/730` if it isn't found, waiting up to 5 minutes).
@@ -201,7 +199,7 @@ Every element has its **own color picker** and separate settings for **Enemy** a
 | `INSERT` | Toggle menu (interactive / non-interactive) |
 | Mouse | Navigate menu / drag by the header |
 
-**Menu tabs** (left → right): <!-- UPDATED: System now listed before Configs to match actual tab indices -->
+**Menu tabs** (left → right):
 
 1. **Aimbot** — Aimbot, Humanization, Triggerbot *(placeholder)*, Recoil *(placeholder)*
 2. **Visuals** — Enemy, Team, Local *(placeholder)*, World *(placeholder)*
@@ -213,6 +211,50 @@ Every element has its **own color picker** and separate settings for **Enemy** a
 
 ---
 
-## ⚙️ Configuration
+## 🎯 Per-Weapon Config (Weapon Groups)
 
-Configurations are stored as `.ini` files in:
+Oblivion supports **multiple aim profiles** — one **Shared** profile that applies to every weapon, plus any number of **Weapon Groups** that each carry their own complete `AimSettings` snapshot (mode, key, FOV, hitbox mask, priority, smooth, visible check, FOV visualize, and every Humanization sub-feature).
+
+The aimbot picks the profile **at runtime** based on the weapon you're currently holding.
+
+### The two expanders in the Aimbot card
+
+At the top of the **Aimbot** card there are two expanders:
+
+| Expander | What it does |
+|----------|--------------|
+| **Group** | Select which profile you're editing. Lists `Shared`, every existing group, and a `+ Create New Group` row. Each group row has a **rename** (✎) and **delete** (✕) icon. |
+| **Weapons** | Assign weapons to the currently-selected group. Shows all 33 built-in weapon presets. Clicking a weapon toggles it in the group; clicking a weapon while `Shared` is selected **creates a new group** for that weapon seeded with your Shared settings. |
+
+Everything else on the Aimbot + Humanization cards (**mode, key, FOV, hitboxes, smooth, humanization…**) reads from `config.CurrentAimEdit()`, so any slider you touch applies to **whichever profile is currently selected in the Group expander**.
+
+### How the profile is chosen in-game
+
+Each tick the aimbot calls `GetWeaponNameFromPawn()` on your local player and iterates `config.aim_groups`. If any group contains a weapon name that matches the current weapon, that group's `settings` become the active config. Otherwise it falls back to `aim_shared`.
+
+Matching is normalized — `"AK-47"`, `"ak47"`, and `"weapon_ak47"` all match.
+
+### Building presets quickly
+
+- **Want one profile for all rifles?** Create a group, name it `Rifles`, then toggle AK-47, M4A4, M4A1-S, AUG, SG 553, Galil AR, FAMAS in the Weapons expander.
+- **Want a dedicated AWP profile?** Create a group `AWP`, toggle AWP, tune smooth/FOV/hitbox, done.
+- **Want every weapon to share the same setup?** Just use the **Shared** profile — no groups needed.
+
+> 💡 **Tip:** A group is automatically **deleted** when you remove its last weapon. Up to **32 groups** can exist at once (33 weapon presets total).
+
+### Where it's stored on disk
+
+Each group is a `[Aimbot_Group_N]` section in the `.ini`:
+
+```ini
+[Aimbot_Group_0]
+name = AK-47
+weapons = AK-47|Galil AR
+enable = true
+mode = 1
+key = 1
+fov = 24
+hitbox = 1
+hitbox_priority = 0
+smooth = 32
+...
