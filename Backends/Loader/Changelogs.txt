@@ -1,3 +1,4 @@
-- Improved overall performance and stability.
-- Enhanced security and protection.
-- Added Per-Weapon Aimbot Configuration, allowing you to customize aimbot settings individually for each weapon.
+- Made all features fully bindable
+- Added a keybinds list
+- Minor UI changes
+- Added Team Check to Aimbot
