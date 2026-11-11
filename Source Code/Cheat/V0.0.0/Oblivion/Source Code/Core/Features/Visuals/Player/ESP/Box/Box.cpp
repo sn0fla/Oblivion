@@ -78,12 +78,12 @@ namespace Features::ESP {
 
         SideCfg sides[2];
         FillSideCfg(sides[0],
-            config.esp_team_enable, config.esp_team_box,
+            config.esp_team_active, config.esp_team_box,
             config.esp_team_box_style_corner, config.esp_team_box_style_rounded,
             config.esp_team_box_style_fill, config.esp_team_box_outline,
             config.esp_team_box_color, config.esp_team_box_fill_color, config.esp_team_box_outline_color);
         FillSideCfg(sides[1],
-            config.esp_enemy_enable, config.esp_enemy_box,
+            config.esp_enemy_active, config.esp_enemy_box,
             config.esp_enemy_box_style_corner, config.esp_enemy_box_style_rounded,
             config.esp_enemy_box_style_fill, config.esp_enemy_box_outline,
             config.esp_enemy_box_color, config.esp_enemy_box_fill_color, config.esp_enemy_box_outline_color);

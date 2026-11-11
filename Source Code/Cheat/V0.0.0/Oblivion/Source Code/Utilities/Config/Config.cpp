@@ -2,6 +2,9 @@
 #include <fstream>
 #include <filesystem>
 #include <sstream>
+#include <Windows.h>
+#include <cstdio>
+#include <cstring>
 
 namespace fs = std::filesystem;
 
@@ -9,6 +12,55 @@ Config config;
 ConfigBrowser configBrowser;
 
 static constexpr uint32_t kSkelMask = 0x7F;
+
+static bool s_labelsInit = false;
+
+static void InitLabels();
+
+const char* GetKeyName(int vk) {
+    static char buf[32];
+    if (vk <= 0) return "None";
+    switch (vk) {
+    case VK_LBUTTON:  return "M1";
+    case VK_RBUTTON:  return "M2";
+    case VK_MBUTTON:  return "M3";
+    case VK_XBUTTON1: return "M4";
+    case VK_XBUTTON2: return "M5";
+    case VK_LSHIFT:   return "LShift";
+    case VK_RSHIFT:   return "RShift";
+    case VK_LCONTROL: return "LCtrl";
+    case VK_RCONTROL: return "RCtrl";
+    case VK_LMENU:    return "LAlt";
+    case VK_RMENU:    return "RAlt";
+    case VK_SPACE:    return "Space";
+    case VK_TAB:      return "Tab";
+    case VK_RETURN:   return "Enter";
+    case VK_ESCAPE:   return "Esc";
+    case VK_BACK:     return "Back";
+    case VK_INSERT:   return "Ins";
+    case VK_DELETE:   return "Del";
+    case VK_HOME:     return "Home";
+    case VK_END:      return "End";
+    case VK_PRIOR:    return "PgUp";
+    case VK_NEXT:     return "PgDn";
+    case VK_CAPITAL:  return "Caps";
+    case VK_NUMLOCK:  return "Num";
+    case VK_SCROLL:   return "Scrl";
+    }
+    if (vk >= 'A' && vk <= 'Z') { buf[0] = (char)vk; buf[1] = 0; return buf; }
+    if (vk >= '0' && vk <= '9') { buf[0] = (char)vk; buf[1] = 0; return buf; }
+    if (vk >= VK_F1 && vk <= VK_F12) {
+        int n = vk - VK_F1 + 1;
+        if (n < 10) { buf[0] = 'F'; buf[1] = (char)('0' + n); buf[2] = 0; }
+        else { buf[0] = 'F'; buf[1] = '1'; buf[2] = (char)('0' + (n - 10)); buf[3] = 0; }
+        return buf;
+    }
+    if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9) {
+        buf[0] = 'N'; buf[1] = (char)('0' + (vk - VK_NUMPAD0)); buf[2] = 0; return buf;
+    }
+    snprintf(buf, sizeof(buf), "VK%02X", vk);
+    return buf;
+}
 
 static void ParseColor(const std::string& v, float out[4]) {
     std::stringstream ss(v);
@@ -33,6 +85,7 @@ static void WriteAimSettings(std::ofstream& f, const AimSettings& a) {
     f << "hitbox_priority = " << a.hitbox_priority << "\n";
     f << "smooth = " << a.smooth << "\n";
     f << "visible_check = " << (a.visible_check ? "true" : "false") << "\n";
+    f << "team_check = " << (a.team_check ? "true" : "false") << "\n";
     f << "fov_visualize = " << (a.fov_visualize ? "true" : "false") << "\n";
     WriteColor(f, "fov_visualize_color", a.fov_visualize_color);
     f << "humanize_enable = " << (a.humanize_enable ? "true" : "false") << "\n";
@@ -64,6 +117,7 @@ static void LoadAimSetting(const std::string& key, const std::string& value, Aim
     else if (key == "hitbox_priority") { try { a.hitbox_priority = std::stoi(value); } catch (...) { a.hitbox_priority = 0; } if (a.hitbox_priority < 0 || a.hitbox_priority > 2) a.hitbox_priority = 0; }
     else if (key == "smooth") { try { a.smooth = std::stof(value); } catch (...) { a.smooth = 50.0f; } if (a.smooth < 0.0f) a.smooth = 0.0f; if (a.smooth > 100.0f) a.smooth = 100.0f; }
     else if (key == "visible_check") a.visible_check = b;
+    else if (key == "team_check") a.team_check = b;
     else if (key == "fov_visualize") a.fov_visualize = b;
     else if (key == "fov_visualize_color") ParseColor(value, a.fov_visualize_color);
     else if (key == "humanize_enable") a.humanize_enable = b;
@@ -83,6 +137,118 @@ static void LoadAimSetting(const std::string& key, const std::string& value, Aim
     else if (key == "humanize_reaction_enable") a.humanize_reaction_enable = b;
     else if (key == "humanize_reaction_min") { try { a.humanize_reaction_min = std::stof(value); } catch (...) {} if (a.humanize_reaction_min < 0.0f) a.humanize_reaction_min = 0.0f; if (a.humanize_reaction_min > 1000.0f) a.humanize_reaction_min = 1000.0f; }
     else if (key == "humanize_reaction_max") { try { a.humanize_reaction_max = std::stof(value); } catch (...) {} if (a.humanize_reaction_max < 0.0f) a.humanize_reaction_max = 0.0f; if (a.humanize_reaction_max > 1000.0f) a.humanize_reaction_max = 1000.0f; }
+}
+
+static void WriteBind(std::ofstream& f, const char* key, const Bind& b) {
+    f << key << " = " << (b.enabled ? 1 : 0) << "," << b.key << ","
+        << b.mode << "," << b.slot << "\n";
+}
+
+static void WriteSliderBinds(std::ofstream& f, const char* key, const SliderBinds& s) {
+    f << key << " = ";
+    for (int i = 0; i < 3; ++i) {
+        if (i) f << "|";
+        const ValueBind& b = s.slots[i];
+        f << (b.enabled ? 1 : 0) << "," << b.key << "," << b.mode << ","
+            << b.slot << "," << b.value;
+    }
+    f << "\n";
+}
+
+static void WriteAimBinds(std::ofstream& f, const AimSettings& a) {
+    WriteBind(f, "bind_enable", a.bind_enable);
+    WriteBind(f, "bind_visible_check", a.bind_visible_check);
+    WriteBind(f, "bind_team_check", a.bind_team_check);
+    WriteBind(f, "bind_fov_visualize", a.bind_fov_visualize);
+    WriteBind(f, "bind_humanize_enable", a.bind_humanize_enable);
+    WriteBind(f, "bind_humanize_rand_smooth", a.bind_humanize_rand_smooth);
+    WriteBind(f, "bind_humanize_jitter", a.bind_humanize_jitter);
+    WriteBind(f, "bind_humanize_overshoot", a.bind_humanize_overshoot);
+    WriteBind(f, "bind_humanize_undershoot", a.bind_humanize_undershoot);
+    WriteBind(f, "bind_humanize_curve", a.bind_humanize_curve);
+    WriteBind(f, "bind_humanize_reaction_enable", a.bind_humanize_reaction_enable);
+
+    WriteSliderBinds(f, "bind_fov", a.bind_fov);
+    WriteSliderBinds(f, "bind_smooth", a.bind_smooth);
+    WriteSliderBinds(f, "bind_hum_smooth_min", a.bind_hum_smooth_min);
+    WriteSliderBinds(f, "bind_hum_smooth_max", a.bind_hum_smooth_max);
+    WriteSliderBinds(f, "bind_hum_jitter_amount", a.bind_hum_jitter_amount);
+    WriteSliderBinds(f, "bind_hum_overshoot_min", a.bind_hum_overshoot_min);
+    WriteSliderBinds(f, "bind_hum_overshoot_max", a.bind_hum_overshoot_max);
+    WriteSliderBinds(f, "bind_hum_undershoot_min", a.bind_hum_undershoot_min);
+    WriteSliderBinds(f, "bind_hum_undershoot_max", a.bind_hum_undershoot_max);
+    WriteSliderBinds(f, "bind_hum_curve_amount", a.bind_hum_curve_amount);
+    WriteSliderBinds(f, "bind_hum_reaction_min", a.bind_hum_reaction_min);
+    WriteSliderBinds(f, "bind_hum_reaction_max", a.bind_hum_reaction_max);
+}
+
+static void ParseBind(const std::string& v, Bind& out) {
+    std::stringstream ss(v);
+    std::string tok;
+    int idx = 0;
+    while (std::getline(ss, tok, ',')) {
+        try {
+            int n = std::stoi(tok);
+            if (idx == 0) out.enabled = (n != 0);
+            else if (idx == 1) { if (n < 0 || n > 255) n = 0; out.key = n; }
+            else if (idx == 2) { if (n < 0 || n > 1) n = 0; out.mode = n; }
+            else if (idx == 3) { if (n < 1 || n > 9) n = 1; out.slot = n; }
+        }
+        catch (...) {}
+        ++idx;
+    }
+}
+
+static void ParseSliderBinds(const std::string& v, SliderBinds& out) {
+    std::stringstream ss(v);
+    std::string chunk;
+    int slotIdx = 0;
+    while (slotIdx < 3 && std::getline(ss, chunk, '|')) {
+        ValueBind& b = out.slots[slotIdx];
+        std::stringstream cs(chunk);
+        std::string tok;
+        int idx = 0;
+        while (std::getline(cs, tok, ',')) {
+            try {
+                if (idx == 0) b.enabled = (std::stoi(tok) != 0);
+                else if (idx == 1) { int n = std::stoi(tok); if (n < 0 || n > 255) n = 0; b.key = n; }
+                else if (idx == 2) { int n = std::stoi(tok); if (n < 0 || n > 1) n = 0; b.mode = n; }
+                else if (idx == 3) { int n = std::stoi(tok); if (n < 1 || n > 9) n = 1; b.slot = n; }
+                else if (idx == 4) b.value = std::stof(tok);
+            }
+            catch (...) {}
+            ++idx;
+        }
+        ++slotIdx;
+    }
+}
+
+static void LoadAimBind(const std::string& key, const std::string& value, AimSettings& a, bool& consumed) {
+    consumed = true;
+    if (key == "bind_enable") ParseBind(value, a.bind_enable);
+    else if (key == "bind_visible_check") ParseBind(value, a.bind_visible_check);
+    else if (key == "bind_team_check") ParseBind(value, a.bind_team_check);
+    else if (key == "bind_fov_visualize") ParseBind(value, a.bind_fov_visualize);
+    else if (key == "bind_humanize_enable") ParseBind(value, a.bind_humanize_enable);
+    else if (key == "bind_humanize_rand_smooth") ParseBind(value, a.bind_humanize_rand_smooth);
+    else if (key == "bind_humanize_jitter") ParseBind(value, a.bind_humanize_jitter);
+    else if (key == "bind_humanize_overshoot") ParseBind(value, a.bind_humanize_overshoot);
+    else if (key == "bind_humanize_undershoot") ParseBind(value, a.bind_humanize_undershoot);
+    else if (key == "bind_humanize_curve") ParseBind(value, a.bind_humanize_curve);
+    else if (key == "bind_humanize_reaction_enable") ParseBind(value, a.bind_humanize_reaction_enable);
+    else if (key == "bind_fov") ParseSliderBinds(value, a.bind_fov);
+    else if (key == "bind_smooth") ParseSliderBinds(value, a.bind_smooth);
+    else if (key == "bind_hum_smooth_min") ParseSliderBinds(value, a.bind_hum_smooth_min);
+    else if (key == "bind_hum_smooth_max") ParseSliderBinds(value, a.bind_hum_smooth_max);
+    else if (key == "bind_hum_jitter_amount") ParseSliderBinds(value, a.bind_hum_jitter_amount);
+    else if (key == "bind_hum_overshoot_min") ParseSliderBinds(value, a.bind_hum_overshoot_min);
+    else if (key == "bind_hum_overshoot_max") ParseSliderBinds(value, a.bind_hum_overshoot_max);
+    else if (key == "bind_hum_undershoot_min") ParseSliderBinds(value, a.bind_hum_undershoot_min);
+    else if (key == "bind_hum_undershoot_max") ParseSliderBinds(value, a.bind_hum_undershoot_max);
+    else if (key == "bind_hum_curve_amount") ParseSliderBinds(value, a.bind_hum_curve_amount);
+    else if (key == "bind_hum_reaction_min") ParseSliderBinds(value, a.bind_hum_reaction_min);
+    else if (key == "bind_hum_reaction_max") ParseSliderBinds(value, a.bind_hum_reaction_max);
+    else consumed = false;
 }
 
 static void WriteFlagsBlock(std::ofstream& f, const char* prefix,
@@ -122,6 +288,131 @@ static void WriteFlagsBlock(std::ofstream& f, const char* prefix,
     WriteColor(f, (std::string(prefix) + "_ammo_color").c_str(), ammoCol);
 }
 
+static void LoadFlagsBlock(const std::string& key, const std::string& value,
+    bool& master, float masterCol[4],
+    bool& flashed, float flashedCol[4],
+    bool& scoped, float scopedCol[4],
+    bool& defusing, float defusingCol[4],
+    bool& planting, float plantingCol[4],
+    bool& bomb, float bombCol[4],
+    bool& armor, float armorCol[4],
+    bool& reloading, float reloadingCol[4],
+    bool& money, float moneyCol[4],
+    bool& ping, float pingCol[4],
+    bool& ammo, float ammoCol[4],
+    bool& consumed)
+{
+    consumed = true;
+    if (key == "flags") master = (value == "true");
+    else if (key == "flags_color") ParseColor(value, masterCol);
+    else if (key == "flags_flashed") flashed = (value == "true");
+    else if (key == "flags_flashed_color") ParseColor(value, flashedCol);
+    else if (key == "flags_scoped") scoped = (value == "true");
+    else if (key == "flags_scoped_color") ParseColor(value, scopedCol);
+    else if (key == "flags_defusing") defusing = (value == "true");
+    else if (key == "flags_defusing_color") ParseColor(value, defusingCol);
+    else if (key == "flags_planting") planting = (value == "true");
+    else if (key == "flags_planting_color") ParseColor(value, plantingCol);
+    else if (key == "flags_bomb") bomb = (value == "true");
+    else if (key == "flags_bomb_color") ParseColor(value, bombCol);
+    else if (key == "flags_armor") armor = (value == "true");
+    else if (key == "flags_armor_color") ParseColor(value, armorCol);
+    else if (key == "flags_reloading") reloading = (value == "true");
+    else if (key == "flags_reloading_color") ParseColor(value, reloadingCol);
+    else if (key == "flags_money") money = (value == "true");
+    else if (key == "flags_money_color") ParseColor(value, moneyCol);
+    else if (key == "flags_ping") ping = (value == "true");
+    else if (key == "flags_ping_color") ParseColor(value, pingCol);
+    else if (key == "flags_ammo") ammo = (value == "true");
+    else if (key == "flags_ammo_color") ParseColor(value, ammoCol);
+    else consumed = false;
+}
+
+static const char* s_espLabels[Config::kBindEspItemCount] = {
+    "Enable ESP", "Box", "Corner", "Rounded", "Fill", "Outline", "Skeleton",
+    "Head", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg", "Feet",
+    "Draw Joints", "Name", "Healthbar", "Distance", "Headcircle", "Snapline",
+    "Viewdirection", "Weapon", "Flags", "Flashed", "Scoped", "Defusing",
+    "Planting", "Bomb", "Armor", "Reloading", "Money", "Ammo", "Offscreen",
+    "Distance", "Size"
+};
+
+static void InitLabels() {
+    static std::string s_espCombined[2][Config::kBindEspItemCount];
+    for (int side = 0; side < 2; ++side) {
+        const char* sideLabel = (side == 0) ? "Enemy" : "Team";
+        for (int i = 0; i < Config::kBindEspItemCount; ++i) {
+            s_espCombined[side][i] = std::string(sideLabel) + " " + s_espLabels[i];
+            config.bind_esp[side][i].label = s_espCombined[side][i];
+        }
+    }
+
+    static std::string s_distLbl[2], s_sizeLbl[2];
+    for (int side = 0; side < 2; ++side) {
+        const char* sideLabel = (side == 0) ? "Enemy" : "Team";
+        s_distLbl[side] = std::string(sideLabel) + " Offscreen Distance";
+        s_sizeLbl[side] = std::string(sideLabel) + " Offscreen Size";
+        for (int s = 0; s < 3; ++s) {
+            config.bind_esp_offscreen_dist[side].slots[s].label = s_distLbl[side];
+            config.bind_esp_offscreen_size[side].slots[s].label = s_sizeLbl[side];
+        }
+    }
+
+    AimSettings* aims[64];
+    int nAim = 0;
+    aims[nAim++] = &config.aim_shared;
+    for (auto& g : config.aim_groups) if (nAim < 64) aims[nAim++] = &g.settings;
+
+    for (int i = 0; i < nAim; ++i) {
+        AimSettings& a = *aims[i];
+        a.bind_enable.label = "Aimbot Enable";
+        a.bind_visible_check.label = "Visible Check";
+        a.bind_team_check.label = "Team Check";
+        a.bind_fov_visualize.label = "Show FOV";
+        a.bind_humanize_enable.label = "Humanize Enable";
+        a.bind_humanize_rand_smooth.label = "Randomize Smooth";
+        a.bind_humanize_jitter.label = "Microjitter";
+        a.bind_humanize_overshoot.label = "Overshoot";
+        a.bind_humanize_undershoot.label = "Undershoot";
+        a.bind_humanize_curve.label = "Aim Curve";
+        a.bind_humanize_reaction_enable.label = "Reaction Delay";
+
+        a.bind_fov.slots[0].label = "Aim FOV";
+        a.bind_smooth.slots[0].label = "Aim Smooth";
+        a.bind_hum_smooth_min.slots[0].label = "Smooth Min";
+        a.bind_hum_smooth_max.slots[0].label = "Smooth Max";
+        a.bind_hum_jitter_amount.slots[0].label = "Jitter Amount";
+        a.bind_hum_overshoot_min.slots[0].label = "Overshoot Min";
+        a.bind_hum_overshoot_max.slots[0].label = "Overshoot Max";
+        a.bind_hum_undershoot_min.slots[0].label = "Undershoot Min";
+        a.bind_hum_undershoot_max.slots[0].label = "Undershoot Max";
+        a.bind_hum_curve_amount.slots[0].label = "Curve Amount";
+        a.bind_hum_reaction_min.slots[0].label = "Reaction Min";
+        a.bind_hum_reaction_max.slots[0].label = "Reaction Max";
+
+        for (int s = 1; s < 3; ++s) {
+            a.bind_fov.slots[s].label = a.bind_fov.slots[0].label;
+            a.bind_smooth.slots[s].label = a.bind_smooth.slots[0].label;
+            a.bind_hum_smooth_min.slots[s].label = a.bind_hum_smooth_min.slots[0].label;
+            a.bind_hum_smooth_max.slots[s].label = a.bind_hum_smooth_max.slots[0].label;
+            a.bind_hum_jitter_amount.slots[s].label = a.bind_hum_jitter_amount.slots[0].label;
+            a.bind_hum_overshoot_min.slots[s].label = a.bind_hum_overshoot_min.slots[0].label;
+            a.bind_hum_overshoot_max.slots[s].label = a.bind_hum_overshoot_max.slots[0].label;
+            a.bind_hum_undershoot_min.slots[s].label = a.bind_hum_undershoot_min.slots[0].label;
+            a.bind_hum_undershoot_max.slots[s].label = a.bind_hum_undershoot_max.slots[0].label;
+            a.bind_hum_curve_amount.slots[s].label = a.bind_hum_curve_amount.slots[0].label;
+            a.bind_hum_reaction_min.slots[s].label = a.bind_hum_reaction_min.slots[0].label;
+            a.bind_hum_reaction_max.slots[s].label = a.bind_hum_reaction_max.slots[0].label;
+        }
+    }
+
+    config.bind_vsync.label = "VSync";
+    config.bind_allow_tearing.label = "Allow Tearing";
+    config.bind_fullscreen_mode.label = "Fullscreen Mode";
+    config.bind_streamproof.label = "Streamproof";
+    config.bind_safe_mode.label = "Safemode";
+}
+
 void Config::SetDefaults() {
     show_menu = false;
 
@@ -130,6 +421,9 @@ void Config::SetDefaults() {
     aim_current_edit = 0;
 
     esp_enemy_enable = false;
+    esp_enemy_hotkey = 0;
+    esp_enemy_hotkey_mode = 0;
+    esp_enemy_active = false;
     esp_enemy_box = false;
     esp_enemy_box_color[0] = 1.0f; esp_enemy_box_color[1] = 0.2f; esp_enemy_box_color[2] = 0.2f; esp_enemy_box_color[3] = 1.0f;
     esp_enemy_box_fill_color[0] = 1.0f; esp_enemy_box_fill_color[1] = 0.2f; esp_enemy_box_fill_color[2] = 0.2f; esp_enemy_box_fill_color[3] = 0.15f;
@@ -186,6 +480,9 @@ void Config::SetDefaults() {
     esp_enemy_offscreen_size = 22.0f;
 
     esp_team_enable = false;
+    esp_team_hotkey = 0;
+    esp_team_hotkey_mode = 0;
+    esp_team_active = false;
     esp_team_box = false;
     esp_team_box_color[0] = 0.2f; esp_team_box_color[1] = 1.0f; esp_team_box_color[2] = 0.2f; esp_team_box_color[3] = 1.0f;
     esp_team_box_fill_color[0] = 0.2f; esp_team_box_fill_color[1] = 1.0f; esp_team_box_fill_color[2] = 0.2f; esp_team_box_fill_color[3] = 0.15f;
@@ -248,6 +545,185 @@ void Config::SetDefaults() {
     safe_mode = true;
     safe_mode_no_warn = false;
     streamproof = false;
+
+    for (int side = 0; side < 2; ++side) {
+        for (int i = 0; i < kBindEspItemCount; ++i) {
+            bind_esp[side][i] = Bind{};
+            if (!s_espLabels[i]) continue;
+            bind_esp[side][i].label = std::string((side == 0 ? "Enemy " : "Team ")) + s_espLabels[i];
+        }
+        for (int s = 0; s < 3; ++s) {
+            bind_esp_offscreen_dist[side].slots[s] = ValueBind{};
+            bind_esp_offscreen_size[side].slots[s] = ValueBind{};
+        }
+    }
+
+    bind_vsync = Bind{};
+    bind_allow_tearing = Bind{};
+    bind_fullscreen_mode = Bind{};
+    bind_streamproof = Bind{};
+    bind_safe_mode = Bind{};
+}
+
+static void ApplyBoolBind(Bind& b, bool* target) {
+    if (!b.enabled || b.key == 0) { b.prev = false; return; }
+    const bool down = (GetAsyncKeyState(b.key) & 0x8000) != 0;
+    if (b.mode == 0) {
+        if (down && !b.prev) *target = !(*target);
+        b.state = *target;
+    }
+    else {
+        if (down) *target = true;
+        else if (b.prev) *target = false;
+        b.state = down;
+    }
+    b.prev = down;
+}
+
+static void ApplyValueBind(ValueBind& b, float* target) {
+    if (!b.enabled || b.key == 0) { b.prev = false; return; }
+    const bool down = (GetAsyncKeyState(b.key) & 0x8000) != 0;
+    if (b.mode == 0) {
+        if (down && !b.prev) {
+            *target = b.value;
+            b.activatedAt = GetTickCount64();
+        }
+    }
+    else {
+        if (down && !b.prev) { b.saved = *target; *target = b.value; b.activatedAt = GetTickCount64(); }
+        else if (!down && b.prev) *target = b.saved;
+    }
+    b.prev = down;
+}
+
+static void ApplySliderBinds(SliderBinds& s, float* target) {
+    for (int i = 0; i < 3; ++i) ApplyValueBind(s.slots[i], target);
+}
+
+static void ApplyAimBinds(AimSettings& a) {
+    ApplyBoolBind(a.bind_enable, &a.enable);
+    ApplyBoolBind(a.bind_visible_check, &a.visible_check);
+    ApplyBoolBind(a.bind_team_check, &a.team_check);
+    ApplyBoolBind(a.bind_fov_visualize, &a.fov_visualize);
+    ApplyBoolBind(a.bind_humanize_enable, &a.humanize_enable);
+    ApplyBoolBind(a.bind_humanize_rand_smooth, &a.humanize_rand_smooth);
+    ApplyBoolBind(a.bind_humanize_jitter, &a.humanize_jitter);
+    ApplyBoolBind(a.bind_humanize_overshoot, &a.humanize_overshoot);
+    ApplyBoolBind(a.bind_humanize_undershoot, &a.humanize_undershoot);
+    ApplyBoolBind(a.bind_humanize_curve, &a.humanize_curve);
+    ApplyBoolBind(a.bind_humanize_reaction_enable, &a.humanize_reaction_enable);
+
+    ApplySliderBinds(a.bind_fov, &a.fov);
+    ApplySliderBinds(a.bind_smooth, &a.smooth);
+    ApplySliderBinds(a.bind_hum_smooth_min, &a.humanize_smooth_min);
+    ApplySliderBinds(a.bind_hum_smooth_max, &a.humanize_smooth_max);
+    ApplySliderBinds(a.bind_hum_jitter_amount, &a.humanize_jitter_amount);
+    ApplySliderBinds(a.bind_hum_overshoot_min, &a.humanize_overshoot_min);
+    ApplySliderBinds(a.bind_hum_overshoot_max, &a.humanize_overshoot_max);
+    ApplySliderBinds(a.bind_hum_undershoot_min, &a.humanize_undershoot_min);
+    ApplySliderBinds(a.bind_hum_undershoot_max, &a.humanize_undershoot_max);
+    ApplySliderBinds(a.bind_hum_curve_amount, &a.humanize_curve_amount);
+    ApplySliderBinds(a.bind_hum_reaction_min, &a.humanize_reaction_min);
+    ApplySliderBinds(a.bind_hum_reaction_max, &a.humanize_reaction_max);
+}
+
+static bool* EspTargetBool(int side, int idx) {
+    if (side == 0) {
+        switch (idx) {
+        case 0: return &config.esp_enemy_enable;
+        case 1: return &config.esp_enemy_box;
+        case 2: return &config.esp_enemy_box_style_corner;
+        case 3: return &config.esp_enemy_box_style_rounded;
+        case 4: return &config.esp_enemy_box_style_fill;
+        case 5: return &config.esp_enemy_box_outline;
+        case 6: return &config.esp_enemy_skeleton;
+        case 7: case 8: case 9: case 10: case 11: case 12: case 13: return nullptr;
+        case 14: return &config.esp_enemy_skeleton_draw_joints;
+        case 15: return &config.esp_enemy_name;
+        case 16: return &config.esp_enemy_healthbar;
+        case 17: return &config.esp_enemy_distance;
+        case 18: return &config.esp_enemy_headcircle;
+        case 19: return &config.esp_enemy_snapline;
+        case 20: return &config.esp_enemy_viewdirection;
+        case 21: return &config.esp_enemy_weapon;
+        case 22: return &config.esp_enemy_flags;
+        case 23: return &config.esp_enemy_flags_flashed;
+        case 24: return &config.esp_enemy_flags_scoped;
+        case 25: return &config.esp_enemy_flags_defusing;
+        case 26: return &config.esp_enemy_flags_planting;
+        case 27: return &config.esp_enemy_flags_bomb;
+        case 28: return &config.esp_enemy_flags_armor;
+        case 29: return &config.esp_enemy_flags_reloading;
+        case 30: return &config.esp_enemy_flags_money;
+        case 31: return &config.esp_enemy_flags_ammo;
+        case 32: return &config.esp_enemy_offscreen;
+        default: return nullptr;
+        }
+    }
+    else {
+        switch (idx) {
+        case 0: return &config.esp_team_enable;
+        case 1: return &config.esp_team_box;
+        case 2: return &config.esp_team_box_style_corner;
+        case 3: return &config.esp_team_box_style_rounded;
+        case 4: return &config.esp_team_box_style_fill;
+        case 5: return &config.esp_team_box_outline;
+        case 6: return &config.esp_team_skeleton;
+        case 7: case 8: case 9: case 10: case 11: case 12: case 13: return nullptr;
+        case 14: return &config.esp_team_skeleton_draw_joints;
+        case 15: return &config.esp_team_name;
+        case 16: return &config.esp_team_healthbar;
+        case 17: return &config.esp_team_distance;
+        case 18: return &config.esp_team_headcircle;
+        case 19: return &config.esp_team_snapline;
+        case 20: return &config.esp_team_viewdirection;
+        case 21: return &config.esp_team_weapon;
+        case 22: return &config.esp_team_flags;
+        case 23: return &config.esp_team_flags_flashed;
+        case 24: return &config.esp_team_flags_scoped;
+        case 25: return &config.esp_team_flags_defusing;
+        case 26: return &config.esp_team_flags_planting;
+        case 27: return &config.esp_team_flags_bomb;
+        case 28: return &config.esp_team_flags_armor;
+        case 29: return &config.esp_team_flags_reloading;
+        case 30: return &config.esp_team_flags_money;
+        case 31: return &config.esp_team_flags_ammo;
+        case 32: return &config.esp_team_offscreen;
+        default: return nullptr;
+        }
+    }
+}
+
+void Config::TickBinds() {
+    if (!s_labelsInit) { s_labelsInit = true; InitLabels(); }
+
+    ApplyAimBinds(aim_shared);
+    for (auto& g : aim_groups) ApplyAimBinds(g.settings);
+
+    for (int side = 0; side < 2; ++side) {
+        for (int i = 0; i < kBindEspItemCount; ++i) {
+            if (i == 33 || i == 34) continue;
+            bool* t = EspTargetBool(side, i);
+            if (t) ApplyBoolBind(bind_esp[side][i], t);
+        }
+        ApplySliderBinds(bind_esp_offscreen_dist[side],
+            (side == 0) ? &esp_enemy_offscreen_distance : &esp_team_offscreen_distance);
+        ApplySliderBinds(bind_esp_offscreen_size[side],
+            (side == 0) ? &esp_enemy_offscreen_size : &esp_team_offscreen_size);
+    }
+
+    ApplyBoolBind(bind_vsync, &vsync);
+    ApplyBoolBind(bind_allow_tearing, &allow_tearing);
+    ApplyBoolBind(bind_fullscreen_mode, &fullscreen_mode);
+    ApplyBoolBind(bind_streamproof, &streamproof);
+    ApplyBoolBind(bind_safe_mode, &safe_mode);
+
+    esp_enemy_active = esp_enemy_enable;
+    esp_team_active = esp_team_enable;
+}
+
+void Config::TickEspHotkeys() {
+    TickBinds();
 }
 
 void Config::Save(const std::string& path) {
@@ -259,6 +735,7 @@ void Config::Save(const std::string& path) {
 
     file << "\n[Aimbot]\n";
     WriteAimSettings(file, aim_shared);
+    WriteAimBinds(file, aim_shared);
     file << "current_edit = " << aim_current_edit << "\n";
 
     for (size_t i = 0; i < aim_groups.size(); ++i) {
@@ -271,10 +748,13 @@ void Config::Save(const std::string& path) {
         }
         file << "weapons = " << weapons << "\n";
         WriteAimSettings(file, aim_groups[i].settings);
+        WriteAimBinds(file, aim_groups[i].settings);
     }
 
     file << "\n[ESP_Enemy]\n";
     file << "enable = " << (esp_enemy_enable ? "true" : "false") << "\n";
+    file << "hotkey = " << esp_enemy_hotkey << "\n";
+    file << "hotkey_mode = " << esp_enemy_hotkey_mode << "\n";
     file << "box = " << (esp_enemy_box ? "true" : "false") << "\n";
     file << "corner = " << (esp_enemy_box_style_corner ? "true" : "false") << "\n";
     file << "rounded = " << (esp_enemy_box_style_rounded ? "true" : "false") << "\n";
@@ -319,8 +799,17 @@ void Config::Save(const std::string& path) {
         esp_enemy_flags_ping, esp_enemy_flags_ping_color,
         esp_enemy_flags_ammo, esp_enemy_flags_ammo_color);
 
+    for (int i = 0; i < kBindEspItemCount; ++i) {
+        char k[64]; snprintf(k, sizeof(k), "bind_%d", i);
+        WriteBind(file, k, bind_esp[0][i]);
+    }
+    WriteSliderBinds(file, "bind_offscreen_dist", bind_esp_offscreen_dist[0]);
+    WriteSliderBinds(file, "bind_offscreen_size", bind_esp_offscreen_size[0]);
+
     file << "\n[ESP_Team]\n";
     file << "enable = " << (esp_team_enable ? "true" : "false") << "\n";
+    file << "hotkey = " << esp_team_hotkey << "\n";
+    file << "hotkey_mode = " << esp_team_hotkey_mode << "\n";
     file << "box = " << (esp_team_box ? "true" : "false") << "\n";
     file << "corner = " << (esp_team_box_style_corner ? "true" : "false") << "\n";
     file << "rounded = " << (esp_team_box_style_rounded ? "true" : "false") << "\n";
@@ -365,71 +854,42 @@ void Config::Save(const std::string& path) {
         esp_team_flags_ping, esp_team_flags_ping_color,
         esp_team_flags_ammo, esp_team_flags_ammo_color);
 
+    for (int i = 0; i < kBindEspItemCount; ++i) {
+        char k[64]; snprintf(k, sizeof(k), "bind_%d", i);
+        WriteBind(file, k, bind_esp[1][i]);
+    }
+    WriteSliderBinds(file, "bind_offscreen_dist", bind_esp_offscreen_dist[1]);
+    WriteSliderBinds(file, "bind_offscreen_size", bind_esp_offscreen_size[1]);
+
     file << "\n[Display]\n";
     file << "vsync = " << (vsync ? "true" : "false") << "\n";
     file << "allow_tearing = " << (allow_tearing ? "true" : "false") << "\n";
     file << "fullscreen_mode = " << (fullscreen_mode ? "true" : "false") << "\n";
+    WriteBind(file, "bind_vsync", bind_vsync);
+    WriteBind(file, "bind_allow_tearing", bind_allow_tearing);
+    WriteBind(file, "bind_fullscreen_mode", bind_fullscreen_mode);
 
     file << "\n[Misc]\n";
     file << "safe_mode = " << (safe_mode ? "true" : "false") << "\n";
     file << "safe_mode_no_warn = " << (safe_mode_no_warn ? "true" : "false") << "\n";
     file << "streamproof = " << (streamproof ? "true" : "false") << "\n";
+    WriteBind(file, "bind_streamproof", bind_streamproof);
+    WriteBind(file, "bind_safe_mode", bind_safe_mode);
 
     file.close();
-}
-
-static void LoadFlagsBlock(const std::string& key, const std::string& value,
-    bool& master, float masterCol[4],
-    bool& flashed, float flashedCol[4],
-    bool& scoped, float scopedCol[4],
-    bool& defusing, float defusingCol[4],
-    bool& planting, float plantingCol[4],
-    bool& bomb, float bombCol[4],
-    bool& armor, float armorCol[4],
-    bool& reloading, float reloadingCol[4],
-    bool& money, float moneyCol[4],
-    bool& ping, float pingCol[4],
-    bool& ammo, float ammoCol[4],
-    bool& consumed)
-{
-    auto Bool = [&](const char* n) { return key == n; };
-    auto Color = [&](const char* n) { return key == n; };
-
-    consumed = true;
-    if (Bool("flags"))                             master = (value == "true");
-    else if (Color("flags_color"))                 ParseColor(value, masterCol);
-    else if (Bool("flags_flashed"))                flashed = (value == "true");
-    else if (Color("flags_flashed_color"))         ParseColor(value, flashedCol);
-    else if (Bool("flags_scoped"))                 scoped = (value == "true");
-    else if (Color("flags_scoped_color"))          ParseColor(value, scopedCol);
-    else if (Bool("flags_defusing"))               defusing = (value == "true");
-    else if (Color("flags_defusing_color"))        ParseColor(value, defusingCol);
-    else if (Bool("flags_planting"))               planting = (value == "true");
-    else if (Color("flags_planting_color"))        ParseColor(value, plantingCol);
-    else if (Bool("flags_bomb"))                   bomb = (value == "true");
-    else if (Color("flags_bomb_color"))            ParseColor(value, bombCol);
-    else if (Bool("flags_armor"))                  armor = (value == "true");
-    else if (Color("flags_armor_color"))           ParseColor(value, armorCol);
-    else if (Bool("flags_reloading"))              reloading = (value == "true");
-    else if (Color("flags_reloading_color"))       ParseColor(value, reloadingCol);
-    else if (Bool("flags_money"))                  money = (value == "true");
-    else if (Color("flags_money_color"))           ParseColor(value, moneyCol);
-    else if (Bool("flags_ping"))                   ping = (value == "true");
-    else if (Color("flags_ping_color"))            ParseColor(value, pingCol);
-    else if (Bool("flags_ammo"))                   ammo = (value == "true");
-    else if (Color("flags_ammo_color"))            ParseColor(value, ammoCol);
-    else consumed = false;
 }
 
 void Config::Load(const std::string& path) {
     if (!fs::exists(path)) {
         SetDefaults();
+        if (!s_labelsInit) { s_labelsInit = true; InitLabels(); }
         return;
     }
 
     std::ifstream file(path);
     if (!file.is_open()) {
         SetDefaults();
+        if (!s_labelsInit) { s_labelsInit = true; InitLabels(); }
         return;
     }
 
@@ -484,7 +944,9 @@ void Config::Load(const std::string& path) {
                 catch (...) { aim_current_edit = 0; }
             }
             else {
-                LoadAimSetting(key, value, aim_shared);
+                bool consumed = false;
+                LoadAimBind(key, value, aim_shared, consumed);
+                if (!consumed) LoadAimSetting(key, value, aim_shared);
             }
         }
         else if (groupSectionIdx >= 0 && groupSectionIdx < (int)aim_groups.size()) {
@@ -503,11 +965,15 @@ void Config::Load(const std::string& path) {
                 }
             }
             else {
-                LoadAimSetting(key, value, grp.settings);
+                bool consumed = false;
+                LoadAimBind(key, value, grp.settings, consumed);
+                if (!consumed) LoadAimSetting(key, value, grp.settings);
             }
         }
         else if (currentSection == "ESP_Enemy") {
             if (key == "enable") esp_enemy_enable = b;
+            else if (key == "hotkey") { try { esp_enemy_hotkey = std::stoi(value); } catch (...) { esp_enemy_hotkey = 0; } if (esp_enemy_hotkey < 0 || esp_enemy_hotkey > 255) esp_enemy_hotkey = 0; }
+            else if (key == "hotkey_mode") { try { esp_enemy_hotkey_mode = std::stoi(value); } catch (...) { esp_enemy_hotkey_mode = 0; } if (esp_enemy_hotkey_mode < 0 || esp_enemy_hotkey_mode > 1) esp_enemy_hotkey_mode = 0; }
             else if (key == "box") esp_enemy_box = b;
             else if (key == "corner") esp_enemy_box_style_corner = b;
             else if (key == "rounded") esp_enemy_box_style_rounded = b;
@@ -538,6 +1004,15 @@ void Config::Load(const std::string& path) {
             else if (key == "viewdirection_color") ParseColor(value, esp_enemy_viewdirection_color);
             else if (key == "weapon_color") ParseColor(value, esp_enemy_weapon_color);
             else if (key == "offscreen_color") ParseColor(value, esp_enemy_offscreen_color);
+            else if (key == "bind_offscreen_dist") ParseSliderBinds(value, bind_esp_offscreen_dist[0]);
+            else if (key == "bind_offscreen_size") ParseSliderBinds(value, bind_esp_offscreen_size[0]);
+            else if (key.size() > 5 && key.compare(0, 5, "bind_") == 0) {
+                try {
+                    int idx = std::stoi(key.substr(5));
+                    if (idx >= 0 && idx < kBindEspItemCount) ParseBind(value, bind_esp[0][idx]);
+                }
+                catch (...) {}
+            }
             else {
                 bool consumed = false;
                 LoadFlagsBlock(key, value,
@@ -557,6 +1032,8 @@ void Config::Load(const std::string& path) {
         }
         else if (currentSection == "ESP_Team") {
             if (key == "enable") esp_team_enable = b;
+            else if (key == "hotkey") { try { esp_team_hotkey = std::stoi(value); } catch (...) { esp_team_hotkey = 0; } if (esp_team_hotkey < 0 || esp_team_hotkey > 255) esp_team_hotkey = 0; }
+            else if (key == "hotkey_mode") { try { esp_team_hotkey_mode = std::stoi(value); } catch (...) { esp_team_hotkey_mode = 0; } if (esp_team_hotkey_mode < 0 || esp_team_hotkey_mode > 1) esp_team_hotkey_mode = 0; }
             else if (key == "box") esp_team_box = b;
             else if (key == "corner") esp_team_box_style_corner = b;
             else if (key == "rounded") esp_team_box_style_rounded = b;
@@ -587,6 +1064,15 @@ void Config::Load(const std::string& path) {
             else if (key == "viewdirection_color") ParseColor(value, esp_team_viewdirection_color);
             else if (key == "weapon_color") ParseColor(value, esp_team_weapon_color);
             else if (key == "offscreen_color") ParseColor(value, esp_team_offscreen_color);
+            else if (key == "bind_offscreen_dist") ParseSliderBinds(value, bind_esp_offscreen_dist[1]);
+            else if (key == "bind_offscreen_size") ParseSliderBinds(value, bind_esp_offscreen_size[1]);
+            else if (key.size() > 5 && key.compare(0, 5, "bind_") == 0) {
+                try {
+                    int idx = std::stoi(key.substr(5));
+                    if (idx >= 0 && idx < kBindEspItemCount) ParseBind(value, bind_esp[1][idx]);
+                }
+                catch (...) {}
+            }
             else {
                 bool consumed = false;
                 LoadFlagsBlock(key, value,
@@ -608,11 +1094,16 @@ void Config::Load(const std::string& path) {
             if (key == "vsync") vsync = b;
             else if (key == "allow_tearing") allow_tearing = b;
             else if (key == "fullscreen_mode") fullscreen_mode = b;
+            else if (key == "bind_vsync") ParseBind(value, bind_vsync);
+            else if (key == "bind_allow_tearing") ParseBind(value, bind_allow_tearing);
+            else if (key == "bind_fullscreen_mode") ParseBind(value, bind_fullscreen_mode);
         }
         else if (currentSection == "Misc") {
             if (key == "safe_mode") safe_mode = b;
             else if (key == "safe_mode_no_warn") safe_mode_no_warn = b;
             else if (key == "streamproof") streamproof = b;
+            else if (key == "bind_streamproof") ParseBind(value, bind_streamproof);
+            else if (key == "bind_safe_mode") ParseBind(value, bind_safe_mode);
         }
     }
 
@@ -620,4 +1111,6 @@ void Config::Load(const std::string& path) {
 
     if (aim_current_edit < 0 || aim_current_edit >(int)aim_groups.size())
         aim_current_edit = 0;
+
+    if (!s_labelsInit) { s_labelsInit = true; InitLabels(); }
 }

@@ -505,6 +505,7 @@ namespace Aimbot {
             eyePos = frame.localOrigin + Vector3(0.0f, 0.0f, 64.0625f);
 
         const bool wantVis = active->visible_check;
+        const bool wantTeamCheck = active->team_check;
 
         const FrameEntity* best = nullptr;
         Vector3             bestPos{};
@@ -512,7 +513,7 @@ namespace Aimbot {
 
         for (const auto& ent : frame.entities) {
             if (!ent.isAlive || ent.isDormant) continue;
-            if (ent.team == frame.localTeam)   continue;
+            if (wantTeamCheck && ent.team == frame.localTeam) continue;
             if (ent.health == 0)               continue;
 
             if (wantVis && frame.localIndex != 0xFFFFFFFFu) {

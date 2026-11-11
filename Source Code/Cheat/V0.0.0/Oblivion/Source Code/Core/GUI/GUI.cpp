@@ -1,6 +1,7 @@
 #include "GUI.hpp"
 #include "Framework/Framework.hpp"
 #include "Widgets/Widgets.hpp"
+#include "../Features/Miscellaneous/Keybinds/Keybinds.hpp"
 #include "../../SDK/Entities/Entities.hpp"
 #include "../../Utilities/Config/Config.hpp"
 
@@ -61,6 +62,8 @@ namespace GUI {
     float g_offscreenExpandT[2] = { 0.0f, 0.0f };
     float g_offscreenExpanderHover[2] = { 0.0f, 0.0f };
 
+    static float  g_showKeybindsHover = 0.0f;
+
     static float  g_linearAnim = 0.0f;
     static ImVec2 g_menuPos = ImVec2(-1.0f, -1.0f);
     static bool   g_dragging = false;
@@ -81,6 +84,8 @@ namespace GUI {
 
     static float  g_aimEnableHover = 0.0f;
     static float  g_aimEnableSel = 0.0f;
+    static float  g_aimTeamCheckHover = 0.0f;
+    static float  g_aimTeamCheckSel = 0.0f;
     static bool   g_aimModeExpanded = false;
     static float  g_aimModeExpandT = 0.0f;
     static float  g_aimModeHover = 0.0f;
@@ -162,51 +167,6 @@ namespace GUI {
         { { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr }, 0 },
     };
 
-    static const char* GetKeyName(int vk) {
-        static char buf[32];
-        if (vk <= 0) return "None";
-        switch (vk) {
-        case VK_LBUTTON:  return "M1";
-        case VK_RBUTTON:  return "M2";
-        case VK_MBUTTON:  return "M3";
-        case VK_XBUTTON1: return "M4";
-        case VK_XBUTTON2: return "M5";
-        case VK_LSHIFT:   return "LShift";
-        case VK_RSHIFT:   return "RShift";
-        case VK_LCONTROL: return "LCtrl";
-        case VK_RCONTROL: return "RCtrl";
-        case VK_LMENU:    return "LAlt";
-        case VK_RMENU:    return "RAlt";
-        case VK_SPACE:    return "Space";
-        case VK_TAB:      return "Tab";
-        case VK_RETURN:   return "Enter";
-        case VK_ESCAPE:   return "Esc";
-        case VK_BACK:     return "Back";
-        case VK_INSERT:   return "Ins";
-        case VK_DELETE:   return "Del";
-        case VK_HOME:     return "Home";
-        case VK_END:      return "End";
-        case VK_PRIOR:    return "PgUp";
-        case VK_NEXT:     return "PgDn";
-        case VK_CAPITAL:  return "Caps";
-        case VK_NUMLOCK:  return "Num";
-        case VK_SCROLL:   return "Scrl";
-        }
-        if (vk >= 'A' && vk <= 'Z') { buf[0] = (char)vk; buf[1] = 0; return buf; }
-        if (vk >= '0' && vk <= '9') { buf[0] = (char)vk; buf[1] = 0; return buf; }
-        if (vk >= VK_F1 && vk <= VK_F12) {
-            int n = vk - VK_F1 + 1;
-            if (n < 10) { buf[0] = 'F'; buf[1] = (char)('0' + n); buf[2] = 0; }
-            else { buf[0] = 'F'; buf[1] = '1'; buf[2] = (char)('0' + (n - 10)); buf[3] = 0; }
-            return buf;
-        }
-        if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9) {
-            buf[0] = 'N'; buf[1] = (char)('0' + (vk - VK_NUMPAD0)); buf[2] = 0; return buf;
-        }
-        snprintf(buf, sizeof(buf), "VK%02X", vk);
-        return buf;
-    }
-
     static bool WeaponGroupHas(const AimWeaponGroup& grp, const char* name) {
         for (const auto& w : grp.weapons)
             if (w == name) return true;
@@ -283,6 +243,212 @@ namespace GUI {
             default: return nullptr;
             }
         }
+    }
+
+    struct BindPopupState {
+        bool  open = false;
+        int   kind = 0;
+        Bind* bptr = nullptr;
+        SliderBinds* sptr = nullptr;
+        float* vptr = nullptr;
+        float vmin = 0.0f;
+        float vmax = 1.0f;
+        bool  capturing = false;
+        bool  waitRelease = false;
+    };
+    static BindPopupState g_bindPopup;
+    static std::string g_bindPopupId = "##bind_popup_shared";
+
+    static void OpenBoolBindPopup(Bind* b) {
+        g_bindPopup.kind = 0;
+        g_bindPopup.bptr = b;
+        g_bindPopup.sptr = nullptr;
+        g_bindPopup.vptr = nullptr;
+        g_bindPopup.capturing = false;
+        g_bindPopup.waitRelease = false;
+        g_bindPopup.open = true;
+    }
+
+    static void OpenSliderBindPopup(SliderBinds* sb, float* v, float vmin, float vmax) {
+        g_bindPopup.kind = 1;
+        g_bindPopup.bptr = nullptr;
+        g_bindPopup.sptr = sb;
+        g_bindPopup.vptr = v;
+        g_bindPopup.vmin = vmin;
+        g_bindPopup.vmax = vmax;
+        g_bindPopup.capturing = false;
+        g_bindPopup.waitRelease = false;
+        g_bindPopup.open = true;
+    }
+
+    static int* BindKeyPtr() {
+        if (g_bindPopup.kind == 0) return g_bindPopup.bptr ? &g_bindPopup.bptr->key : nullptr;
+        if (g_bindPopup.kind == 1 && g_bindPopup.sptr) return &g_bindPopup.sptr->slots[g_bindPopup.sptr->editSlot].key;
+        return nullptr;
+    }
+
+    static void RenderBindPopup(float s) {
+        if (g_bindPopup.open) {
+            ImGui::OpenPopup(g_bindPopupId.c_str());
+            g_bindPopup.open = false;
+        }
+
+        if (g_bindPopup.capturing) {
+            if (g_bindPopup.waitRelease) {
+                if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) g_bindPopup.waitRelease = false;
+            }
+            else {
+                for (int vk = 1; vk < 256; ++vk) {
+                    if (GetAsyncKeyState(vk) & 0x8000) {
+                        int val = (vk == VK_ESCAPE) ? 0 : vk;
+                        int* kp = BindKeyPtr();
+                        if (kp) *kp = val;
+                        g_bindPopup.capturing = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 7.0f * s);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f * s, 12.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f * s);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(9.0f * s, 6.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f * s, 6.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(0.0f, 0.0f));
+
+        ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.10f, 0.10f, 0.13f, 0.98f));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.741f, 0.690f, 1.0f, 0.35f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.16f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.16f, 0.15f, 0.22f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.18f, 0.17f, 0.26f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.88f, 0.86f, 1.0f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.18f, 0.28f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.25f, 0.38f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.35f, 0.30f, 0.48f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.741f, 0.690f, 1.0f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.741f, 0.690f, 1.0f, 0.20f));
+        ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, ImVec4(0.741f, 0.690f, 1.0f, 0.35f));
+
+        if (ImGui::BeginPopup(g_bindPopupId.c_str())) {
+            if (g_bindPopup.kind == 0 && g_bindPopup.bptr) {
+                Bind* b = g_bindPopup.bptr;
+
+                ImGui::TextUnformatted("Name");
+                char labelBuf[128];
+                snprintf(labelBuf, sizeof(labelBuf), "%s", b->label.c_str());
+                ImGui::SetNextItemWidth(220.0f * s);
+                if (ImGui::InputText("##bind_label", labelBuf, sizeof(labelBuf))) {
+                    b->label = labelBuf;
+                }
+                ImGui::Separator();
+
+                bool en = b->enabled;
+                if (ImGui::Checkbox("Enabled##bind_en", &en)) b->enabled = en;
+
+                ImGui::Spacing();
+                ImGui::TextUnformatted("Key");
+                const char* kt = g_bindPopup.capturing ? "..." : (b->key == 0 ? "None" : GetKeyName(b->key));
+                if (ImGui::Button(kt, ImVec2(96.0f * s, 0))) {
+                    g_bindPopup.capturing = true;
+                    g_bindPopup.waitRelease = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Clear##bind_clr", ImVec2(64.0f * s, 0))) {
+                    b->key = 0;
+                    g_bindPopup.capturing = false;
+                }
+
+                ImGui::Spacing();
+                ImGui::TextUnformatted("Mode");
+                const char* bm[] = { "Toggle", "Hold" };
+                for (int i = 0; i < 2; ++i) {
+                    if (i > 0) ImGui::SameLine();
+                    bool sel = (b->mode == i);
+                    if (sel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.35f, 0.30f, 0.48f, 1.0f));
+                    char id[16]; snprintf(id, sizeof(id), "%s##bm%d", bm[i], i);
+                    if (ImGui::Button(id, ImVec2(74.0f * s, 0))) b->mode = i;
+                    if (sel) ImGui::PopStyleColor();
+                }
+            }
+            else if (g_bindPopup.kind == 1 && g_bindPopup.sptr) {
+                SliderBinds* sb = g_bindPopup.sptr;
+                if (sb->editSlot < 0) sb->editSlot = 0;
+                if (sb->editSlot > 2) sb->editSlot = 2;
+
+                ImGui::TextUnformatted("Slider Bind");
+                ImGui::Separator();
+
+                for (int i = 0; i < 3; ++i) {
+                    if (i > 0) ImGui::SameLine();
+                    bool sel = (sb->editSlot == i);
+                    if (sel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.35f, 0.30f, 0.48f, 1.0f));
+                    char id[16]; snprintf(id, sizeof(id), "Slot %d##sls%d", i + 1, i);
+                    if (ImGui::Button(id, ImVec2(64.0f * s, 0))) sb->editSlot = i;
+                    if (sel) ImGui::PopStyleColor();
+                }
+
+                ValueBind& vb = sb->slots[sb->editSlot];
+
+                ImGui::Spacing();
+                ImGui::TextUnformatted("Name");
+                char labelBuf[128];
+                snprintf(labelBuf, sizeof(labelBuf), "%s", vb.label.c_str());
+                ImGui::SetNextItemWidth(220.0f * s);
+                if (ImGui::InputText("##vb_label", labelBuf, sizeof(labelBuf))) {
+                    vb.label = labelBuf;
+                }
+                ImGui::Separator();
+
+                ImGui::Spacing();
+                bool en = vb.enabled;
+                if (ImGui::Checkbox("Enabled##vb_en", &en)) vb.enabled = en;
+
+                ImGui::Spacing();
+                ImGui::TextUnformatted("Key");
+                const char* kt = g_bindPopup.capturing ? "..." : (vb.key == 0 ? "None" : GetKeyName(vb.key));
+                if (ImGui::Button(kt, ImVec2(96.0f * s, 0))) {
+                    g_bindPopup.capturing = true;
+                    g_bindPopup.waitRelease = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Clear##vb_clr", ImVec2(64.0f * s, 0))) {
+                    vb.key = 0;
+                    g_bindPopup.capturing = false;
+                }
+
+                ImGui::Spacing();
+                ImGui::TextUnformatted("Mode");
+                const char* vm[] = { "Set Once", "Hold" };
+                for (int i = 0; i < 2; ++i) {
+                    if (i > 0) ImGui::SameLine();
+                    bool sel = (vb.mode == i);
+                    if (sel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.35f, 0.30f, 0.48f, 1.0f));
+                    char id[16]; snprintf(id, sizeof(id), "%s##vm%d", vm[i], i);
+                    if (ImGui::Button(id, ImVec2(80.0f * s, 0))) vb.mode = i;
+                    if (sel) ImGui::PopStyleColor();
+                }
+
+                ImGui::Spacing();
+                ImGui::TextUnformatted("Value");
+                ImGui::SetNextItemWidth(120.0f * s);
+                float v = vb.value;
+                if (ImGui::InputFloat("##vb_value", &v, 0.0f, 0.0f, "%.2f")) {
+                    if (v < g_bindPopup.vmin) v = g_bindPopup.vmin;
+                    if (v > g_bindPopup.vmax) v = g_bindPopup.vmax;
+                    vb.value = v;
+                }
+            }
+            ImGui::EndPopup();
+        }
+
+        ImGui::PopStyleColor(12);
+        ImGui::PopStyleVar(7);
+    }
+
+    static void RenderEspHotkeyPopupContent(bool isEnemy, float s) {
+        (void)isEnemy; (void)s;
     }
 
     static void PushPickerStyle(float s) {
@@ -763,6 +929,12 @@ namespace GUI {
 
         dl->AddLine(a, b, col, th);
         dl->AddLine(b, d, col, th);
+    }
+
+    static bool RightClickIn(ImVec2 mn, ImVec2 mx, ImVec2 mouse) {
+        return mouse.x >= mn.x && mouse.x <= mx.x &&
+            mouse.y >= mn.y && mouse.y <= mx.y &&
+            ImGui::IsMouseClicked(1);
     }
 
     static void DrawAimbotCard(ImDrawList* dl, ImVec2 min, ImVec2 max,
@@ -1264,6 +1436,10 @@ namespace GUI {
                 Framework::PlayClickSound();
                 A->enable = !A->enable;
             }
+            if (RightClickIn(cbMin, cbMax, mouse)) {
+                Framework::PlayClickSound();
+                OpenBoolBindPopup(&A->bind_enable);
+            }
 
             g_aimEnableHover += ((hov ? 1.0f : 0.0f) - g_aimEnableHover) * kApproach;
             g_aimEnableSel += (((A->enable) ? 1.0f : 0.0f) - g_aimEnableSel) * kApproach;
@@ -1441,6 +1617,12 @@ namespace GUI {
                     ImVec2(sliderX + sliderW, sliderY + 4.0f * s) };
                 Widgets::DrawDashedSlider(dl, sr, &A->fov, 0.0f, 180.0f,
                     alpha, s, "##aim_fov_s");
+
+                if (RightClickIn(ImVec2(sliderX, sliderY - 4.0f * s),
+                    ImVec2(sliderX + sliderW, sliderY + 8.0f * s), mouse)) {
+                    Framework::PlayClickSound();
+                    OpenSliderBindPopup(&A->bind_fov, &A->fov, 0.0f, 180.0f);
+                }
             }
 
             char buf[16];
@@ -1480,6 +1662,10 @@ namespace GUI {
             if (cbHov && ImGui::IsMouseClicked(0)) {
                 Framework::PlayClickSound();
                 A->fov_visualize = !A->fov_visualize;
+            }
+            if (RightClickIn(cbMin, cbMax, mouse)) {
+                Framework::PlayClickSound();
+                OpenBoolBindPopup(&A->bind_fov_visualize);
             }
 
             g_aimFovVisHover += ((cbHov ? 1.0f : 0.0f) - g_aimFovVisHover) * kApproach;
@@ -1543,6 +1729,10 @@ namespace GUI {
                 Framework::PlayClickSound();
                 A->visible_check = !A->visible_check;
             }
+            if (RightClickIn(cbMin, cbMax, mouse)) {
+                Framework::PlayClickSound();
+                OpenBoolBindPopup(&A->bind_visible_check);
+            }
 
             g_aimVisibleHover += ((hov ? 1.0f : 0.0f) - g_aimVisibleHover) * kApproach;
             g_aimVisibleSel += (((A->visible_check) ? 1.0f : 0.0f) - g_aimVisibleSel) * kApproach;
@@ -1551,6 +1741,39 @@ namespace GUI {
 
             if (textFont) {
                 const char* lbl = "Visible Check";
+                const ImVec2 lsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, lbl);
+                const float ly = cy - lsz.y * 0.5f;
+                dl->AddText(textFont, labelFs, ImVec2(floorf(contentX + 0.5f), floorf(ly + 0.5f)),
+                    IM_COL32(200, 195, 235, (int)(alpha * 255.0f)), lbl);
+            }
+
+            rowY += rowH;
+        }
+
+        {
+            const float cy = rowY + rowH * 0.5f;
+            const ImVec2 cbMin(max.x - pad - cbSize, cy - cbSize * 0.5f);
+            const ImVec2 cbMax(cbMin.x + cbSize, cbMin.y + cbSize);
+
+            const bool hov = mouse.x >= cbMin.x && mouse.x <= cbMax.x
+                && mouse.y >= cbMin.y && mouse.y <= cbMax.y;
+
+            if (hov && ImGui::IsMouseClicked(0)) {
+                Framework::PlayClickSound();
+                A->team_check = !A->team_check;
+            }
+            if (RightClickIn(cbMin, cbMax, mouse)) {
+                Framework::PlayClickSound();
+                OpenBoolBindPopup(&A->bind_team_check);
+            }
+
+            g_aimTeamCheckHover += ((hov ? 1.0f : 0.0f) - g_aimTeamCheckHover) * kApproach;
+            g_aimTeamCheckSel += (((A->team_check) ? 1.0f : 0.0f) - g_aimTeamCheckSel) * kApproach;
+
+            drawCheckbox(cbMin, A->team_check, g_aimTeamCheckHover, 1.0f);
+
+            if (textFont) {
+                const char* lbl = "Team Check";
                 const ImVec2 lsz = textFont->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, lbl);
                 const float ly = cy - lsz.y * 0.5f;
                 dl->AddText(textFont, labelFs, ImVec2(floorf(contentX + 0.5f), floorf(ly + 0.5f)),
@@ -1816,6 +2039,12 @@ namespace GUI {
                 ImVec2(contentX + contentW, sliderTop + 10.0f * s) };
             Widgets::DrawDashedSlider(dl, sr, &A->smooth, 0.0f, 100.0f,
                 alpha, s, "##aim_smooth_s");
+
+            if (RightClickIn(ImVec2(contentX, sliderTop - 2.0f * s),
+                ImVec2(contentX + contentW, sliderTop + 12.0f * s), mouse)) {
+                Framework::PlayClickSound();
+                OpenSliderBindPopup(&A->bind_smooth, &A->smooth, 0.0f, 100.0f);
+            }
             rowY += 13.0f * s;
         }
 
@@ -1971,6 +2200,10 @@ namespace GUI {
                 Framework::PlayClickSound();
                 A->humanize_enable = !A->humanize_enable;
             }
+            if (RightClickIn(cbMin, cbMax, mouse)) {
+                Framework::PlayClickSound();
+                OpenBoolBindPopup(&A->bind_humanize_enable);
+            }
 
             g_humEnableHover += ((hov ? 1.0f : 0.0f) - g_humEnableHover) * kApproach;
             g_humEnableSel += (((A->humanize_enable) ? 1.0f : 0.0f) - g_humEnableSel) * kApproach;
@@ -1990,47 +2223,56 @@ namespace GUI {
         for (int fi = 0; fi < kHumFeatureCount; ++fi) {
             const char* fname = "";
             bool* fEnable = nullptr;
+            Bind* fBind = nullptr;
             float* s1 = nullptr; float s1min = 0.0f, s1max = 100.0f; const char* s1label = "Value"; const char* s1fmt = "%.0f";
             float* s2 = nullptr; float s2min = 0.0f, s2max = 100.0f; const char* s2label = "Value"; const char* s2fmt = "%.0f";
+            SliderBinds* sb1 = nullptr;
+            SliderBinds* sb2 = nullptr;
             bool twoSliders = false;
 
             switch (fi) {
             case 0:
                 fname = "Randomize Smooth";
                 fEnable = &A->humanize_rand_smooth;
-                s1 = &A->humanize_smooth_min; s1min = 0.0f; s1max = 100.0f; s1label = "Min";
-                s2 = &A->humanize_smooth_max; s2min = 0.0f; s2max = 100.0f; s2label = "Max";
+                fBind = &A->bind_humanize_rand_smooth;
+                s1 = &A->humanize_smooth_min; s1min = 0.0f; s1max = 100.0f; s1label = "Min"; sb1 = &A->bind_hum_smooth_min;
+                s2 = &A->humanize_smooth_max; s2min = 0.0f; s2max = 100.0f; s2label = "Max"; sb2 = &A->bind_hum_smooth_max;
                 twoSliders = true;
                 break;
             case 1:
                 fname = "Microjitter";
                 fEnable = &A->humanize_jitter;
-                s1 = &A->humanize_jitter_amount; s1min = 0.0f; s1max = 20.0f; s1label = "Amount";
+                fBind = &A->bind_humanize_jitter;
+                s1 = &A->humanize_jitter_amount; s1min = 0.0f; s1max = 20.0f; s1label = "Amount"; sb1 = &A->bind_hum_jitter_amount;
                 break;
             case 2:
                 fname = "Overshoot";
                 fEnable = &A->humanize_overshoot;
-                s1 = &A->humanize_overshoot_min; s1min = 0.0f; s1max = 50.0f; s1label = "Min";
-                s2 = &A->humanize_overshoot_max; s2min = 0.0f; s2max = 50.0f; s2label = "Max";
+                fBind = &A->bind_humanize_overshoot;
+                s1 = &A->humanize_overshoot_min; s1min = 0.0f; s1max = 50.0f; s1label = "Min"; sb1 = &A->bind_hum_overshoot_min;
+                s2 = &A->humanize_overshoot_max; s2min = 0.0f; s2max = 50.0f; s2label = "Max"; sb2 = &A->bind_hum_overshoot_max;
                 twoSliders = true;
                 break;
             case 3:
                 fname = "Undershoot";
                 fEnable = &A->humanize_undershoot;
-                s1 = &A->humanize_undershoot_min; s1min = 0.0f; s1max = 50.0f; s1label = "Min";
-                s2 = &A->humanize_undershoot_max; s2min = 0.0f; s2max = 50.0f; s2label = "Max";
+                fBind = &A->bind_humanize_undershoot;
+                s1 = &A->humanize_undershoot_min; s1min = 0.0f; s1max = 50.0f; s1label = "Min"; sb1 = &A->bind_hum_undershoot_min;
+                s2 = &A->humanize_undershoot_max; s2min = 0.0f; s2max = 50.0f; s2label = "Max"; sb2 = &A->bind_hum_undershoot_max;
                 twoSliders = true;
                 break;
             case 4:
                 fname = "Aim Curve";
                 fEnable = &A->humanize_curve;
-                s1 = &A->humanize_curve_amount; s1min = 0.0f; s1max = 1.0f; s1label = "Amount"; s1fmt = "%.2f";
+                fBind = &A->bind_humanize_curve;
+                s1 = &A->humanize_curve_amount; s1min = 0.0f; s1max = 1.0f; s1label = "Amount"; s1fmt = "%.2f"; sb1 = &A->bind_hum_curve_amount;
                 break;
             case 5:
                 fname = "Reaction Delay";
                 fEnable = &A->humanize_reaction_enable;
-                s1 = &A->humanize_reaction_min; s1min = 0.0f; s1max = 500.0f; s1label = "Min"; s1fmt = "%.0f ms";
-                s2 = &A->humanize_reaction_max; s2min = 0.0f; s2max = 500.0f; s2label = "Max"; s2fmt = "%.0f ms";
+                fBind = &A->bind_humanize_reaction_enable;
+                s1 = &A->humanize_reaction_min; s1min = 0.0f; s1max = 500.0f; s1label = "Min"; s1fmt = "%.0f ms"; sb1 = &A->bind_hum_reaction_min;
+                s2 = &A->humanize_reaction_max; s2min = 0.0f; s2max = 500.0f; s2label = "Max"; s2fmt = "%.0f ms"; sb2 = &A->bind_hum_reaction_max;
                 twoSliders = true;
                 break;
             }
@@ -2049,6 +2291,10 @@ namespace GUI {
                 if (hov && ImGui::IsMouseClicked(0)) {
                     Framework::PlayClickSound();
                     *fEnable = !(*fEnable);
+                }
+                if (fBind && RightClickIn(cbMin, cbMax, mouse)) {
+                    Framework::PlayClickSound();
+                    OpenBoolBindPopup(fBind);
                 }
 
                 g_humCbHover[fi] += ((hov ? 1.0f : 0.0f) - g_humCbHover[fi]) * kApproach;
@@ -2094,7 +2340,7 @@ namespace GUI {
                 const float expandT = g_humExpandT[fi];
                 const float sliderAlpha = rowAlpha * (featOn ? 1.0f : 0.5f) * expandT;
 
-                auto drawSliderRow = [&](const char* label, float* val, float vmin, float vmax, int uid, const char* fmt) {
+                auto drawSliderRow = [&](const char* label, float* val, float vmin, float vmax, int uid, const char* fmt, SliderBinds* sb) {
                     const float cy = rowY + optRowH * 0.5f * expandT;
                     const float indentX = contentX + indent;
 
@@ -2134,14 +2380,20 @@ namespace GUI {
                             ImVec2(sliderX, sliderY),
                             ImVec2(sliderX + sliderW, sliderY + 4.0f * s) };
                         Widgets::DrawDashedSlider(dl, sr, val, vmin, vmax, sliderAlpha, s, sid);
+
+                        if (sb && RightClickIn(ImVec2(sliderX, sliderY - 4.0f * s),
+                            ImVec2(sliderX + sliderW, sliderY + 8.0f * s), mouse)) {
+                            Framework::PlayClickSound();
+                            OpenSliderBindPopup(sb, val, vmin, vmax);
+                        }
                     }
 
                     rowY += optRowH * expandT;
                     };
 
-                drawSliderRow(s1label, s1, s1min, s1max, 0, s1fmt);
+                drawSliderRow(s1label, s1, s1min, s1max, 0, s1fmt, sb1);
                 if (twoSliders && s2) {
-                    drawSliderRow(s2label, s2, s2min, s2max, 1, s2fmt);
+                    drawSliderRow(s2label, s2, s2min, s2max, 1, s2fmt, sb2);
                 }
             }
         }
@@ -2185,6 +2437,7 @@ namespace GUI {
         const float tearRowY = vsyncRowY + rowH;
         const float fullscreenRowY = tearRowY + rowH;
         const float streamproofRowY = fullscreenRowY + rowH;
+        const float keybindsRowY = streamproofRowY + rowH;
 
         {
             const float cbY0 = safeRowY + (rowH - cbSize) * 0.5f;
@@ -2232,6 +2485,10 @@ namespace GUI {
                     config.safe_mode = true;
                 }
             }
+            if (RightClickIn(ImVec2(cbX0, cbY0), ImVec2(cbX1, cbY1), mouse)) {
+                Framework::PlayClickSound();
+                OpenBoolBindPopup(&config.bind_safe_mode);
+            }
         }
 
         {
@@ -2271,6 +2528,10 @@ namespace GUI {
             if (hov && ImGui::IsMouseClicked(0)) {
                 Framework::PlayClickSound();
                 config.vsync = !config.vsync;
+            }
+            if (RightClickIn(ImVec2(cbX0, cbY0), ImVec2(cbX1, cbY1), mouse)) {
+                Framework::PlayClickSound();
+                OpenBoolBindPopup(&config.bind_vsync);
             }
         }
 
@@ -2312,6 +2573,10 @@ namespace GUI {
                 Framework::PlayClickSound();
                 config.allow_tearing = !config.allow_tearing;
             }
+            if (RightClickIn(ImVec2(cbX0, cbY0), ImVec2(cbX1, cbY1), mouse)) {
+                Framework::PlayClickSound();
+                OpenBoolBindPopup(&config.bind_allow_tearing);
+            }
         }
 
         {
@@ -2352,6 +2617,10 @@ namespace GUI {
                 Framework::PlayClickSound();
                 config.fullscreen_mode = !config.fullscreen_mode;
             }
+            if (RightClickIn(ImVec2(cbX0, cbY0), ImVec2(cbX1, cbY1), mouse)) {
+                Framework::PlayClickSound();
+                OpenBoolBindPopup(&config.bind_fullscreen_mode);
+            }
         }
 
         {
@@ -2391,6 +2660,50 @@ namespace GUI {
             if (hov && ImGui::IsMouseClicked(0)) {
                 Framework::PlayClickSound();
                 config.streamproof = !config.streamproof;
+            }
+            if (RightClickIn(ImVec2(cbX0, cbY0), ImVec2(cbX1, cbY1), mouse)) {
+                Framework::PlayClickSound();
+                OpenBoolBindPopup(&config.bind_streamproof);
+            }
+        }
+
+        {
+            const float cbY0 = keybindsRowY + (rowH - cbSize) * 0.5f;
+            const float cbY1 = cbY0 + cbSize;
+            const bool hov = interactive
+                && mouse.x >= cbX0 && mouse.x <= cbX1
+                && mouse.y >= cbY0 && mouse.y <= cbY1;
+
+            g_showKeybindsHover += ((hov ? 1.0f : 0.0f) - g_showKeybindsHover) * kApproach;
+
+            const bool enabled = Keybinds::Visible();
+            const float selT = enabled ? 1.0f : 0.0f;
+            const float st = (selT > g_showKeybindsHover) ? selT : g_showKeybindsHover;
+            const int mR = (int)(120 + (189 - 120) * st);
+            const int mG = (int)(110 + (176 - 110) * st);
+            const int mB = (int)(180 + (255 - 180) * st);
+            const int mFillA = (int)(cardAlpha * (0.35f + 0.65f * selT) * 255.0f);
+            const int mRingA = (int)(cardAlpha * 0.55f * g_showKeybindsHover * 255.0f);
+
+            dl->AddRectFilled(ImVec2(cbX0, cbY0), ImVec2(cbX1, cbY1),
+                IM_COL32(mR, mG, mB, mFillA), 4.0f * s);
+            if (mRingA > 2)
+                dl->AddRect(ImVec2(cbX0, cbY0), ImVec2(cbX1, cbY1),
+                    IM_COL32(mR, mG, mB, mRingA), 4.0f * s, 0, 1.5f * s);
+
+            if (font) {
+                const ImVec2 lsz = font->CalcTextSizeA(labelFs, FLT_MAX, 0.0f, "Keybinds List");
+                const float ly = keybindsRowY + (rowH - lsz.y) * 0.5f;
+                const int lr = (int)(190 + (235 - 190) * st);
+                const int lg = (int)(185 + (228 - 185) * st);
+                const int lb = (int)(215 + (255 - 215) * st);
+                dl->AddText(font, labelFs, ImVec2(floorf(labelX + 0.5f), floorf(ly + 0.5f)),
+                    IM_COL32(lr, lg, lb, (int)(cardAlpha * 255.0f)), "Keybinds List");
+            }
+
+            if (hov && ImGui::IsMouseClicked(0)) {
+                Framework::PlayClickSound();
+                Keybinds::SetVisible(!Keybinds::Visible());
             }
         }
 
@@ -2575,7 +2888,7 @@ namespace GUI {
 
     static void PlaceOffscreenSliders(ImDrawList* dl, ImVec2 drawMin, ImVec2 drawMax,
         float expandBox, float expandSkel, float expandFlags, float expandOffscreen,
-        float s, int curSub, float a, ImFont* font, float labelFs)
+        float s, int curSub, float a, ImFont* font, float labelFs, const ImVec2& mouse)
     {
         if (a < 0.5f) return;
         if (expandOffscreen < 0.01f) return;
@@ -2629,6 +2942,14 @@ namespace GUI {
             if (sr.max.x - sr.min.x < 16.0f) continue;
 
             Widgets::DrawDashedSlider(dl, sr, valPtr, vmin, vmax, alpha, s, s_ids[k]);
+
+            if (mouse.x >= sr.min.x - 2.0f * s && mouse.x <= sr.max.x + 2.0f * s &&
+                mouse.y >= sr.min.y - 6.0f * s && mouse.y <= sr.max.y + 6.0f * s &&
+                ImGui::IsMouseClicked(1)) {
+                Framework::PlayClickSound();
+                OpenSliderBindPopup(&config.bind_esp_offscreen_dist[curSub], valPtr,
+                    (k == 0) ? 0.15f : 12.0f, (k == 0) ? 0.95f : 50.0f);
+            }
         }
     }
 
@@ -3078,8 +3399,21 @@ namespace GUI {
         if (open) g_linearAnim = (std::min)(1.0f, g_linearAnim + step);
         else      g_linearAnim = (std::max)(0.0f, g_linearAnim - step);
 
+        constexpr float kBaseW = 720.0f;
+        constexpr float kBaseH = 520.0f;
+        constexpr float kHeaderH = 46.0f;
+        constexpr float kSmallScale = 0.10f;
+
+        if (g_menuPos.x < 0.0f || g_menuPos.y < 0.0f) {
+            g_menuPos.x = io.DisplaySize.x * 0.5f - kBaseW * 0.5f;
+            g_menuPos.y = io.DisplaySize.y * 0.5f - kBaseH * 0.5f;
+        }
+
         if (g_linearAnim < 0.001f && !open) {
             g_dragging = false;
+            if (Keybinds::Visible()) {
+                Keybinds::Render(1.0f, g_menuPos, kBaseW);
+            }
             return;
         }
 
@@ -3087,19 +3421,9 @@ namespace GUI {
         float a = raw * raw * (3.0f - 2.0f * raw);
         if (std::isnan(a) || std::isinf(a)) a = 1.0f;
 
-        constexpr float kBaseW = 720.0f;
-        constexpr float kBaseH = 520.0f;
-        constexpr float kHeaderH = 46.0f;
-        constexpr float kSmallScale = 0.10f;
-
         const float s = kSmallScale + (1.0f - kSmallScale) * a;
         const float menuW = kBaseW * s;
         const float menuH = kBaseH * s;
-
-        if (g_menuPos.x < 0.0f || g_menuPos.y < 0.0f) {
-            g_menuPos.x = io.DisplaySize.x * 0.5f - kBaseW * 0.5f;
-            g_menuPos.y = io.DisplaySize.y * 0.5f - kBaseH * 0.5f;
-        }
 
         const float anchorX = g_menuPos.x + kBaseW * 0.5f;
         const float finalBottomY = g_menuPos.y + kBaseH;
@@ -3328,7 +3652,7 @@ namespace GUI {
             ImDrawList* cdl = ImGui::GetWindowDrawList();
 
             PlaceOffscreenSliders(cdl, drawMin, drawMax, expandBox, expandSkel,
-                expandFlags, expandOffscreen, s, curSub, a, font, labelFs);
+                expandFlags, expandOffscreen, s, curSub, a, font, labelFs, mouse);
 
             cdl->PushClipRect(c0min, c0max, true);
 
@@ -3375,6 +3699,10 @@ namespace GUI {
                 if (hov && ImGui::IsMouseClicked(0)) {
                     Framework::PlayClickSound();
                     ToggleRow(i);
+                }
+                if (hov && ImGui::IsMouseClicked(1)) {
+                    Framework::PlayClickSound();
+                    OpenBoolBindPopup(&config.bind_esp[curSub][i]);
                 }
 
                 const bool on = GetRowValue(i);
@@ -3563,6 +3891,8 @@ namespace GUI {
             DrawSystemCard(dl, pos, menuW, menuH, hdrH, s, a, dt, font, labelFs);
         }
 
+        RenderBindPopup(s);
+
         DrawSafeModeConfirmPopup(pos, menuW, menuH, s);
         DrawUnloadConfirmPopup(pos, menuW, menuH, s);
 
@@ -3602,6 +3932,10 @@ namespace GUI {
         }
 
         ImGui::End();
+
+        if (Keybinds::Visible()) {
+            Keybinds::Render(1.0f, g_menuPos, kBaseW);
+        }
 
         ImGui::PopStyleVar(4);
         ImGui::PopStyleColor(1);

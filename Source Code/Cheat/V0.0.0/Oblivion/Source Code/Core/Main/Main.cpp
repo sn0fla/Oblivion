@@ -117,7 +117,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
                 }
 
                 if (wait == WAIT_FAILED) {
-                    // Handle likely lacks SYNCHRONIZE. Fall back to exit-code polling.
                     DWORD exitCode = 0;
                     if (GetExitCodeProcess(mem.handle, &exitCode)) {
                         if (exitCode != STILL_ACTIVE) {
@@ -126,20 +125,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
                             g_unload_requested.store(true, std::memory_order_release);
                             return;
                         }
-                        // Process still alive; wait a bit before retrying.
                         for (int i = 0; i < 50 && !g_StopMemInit.load(std::memory_order_relaxed); ++i) {
                             Sleep(10);
                         }
                     }
                     else {
-                        // No query rights either — can't monitor. Stop watching but keep running.
                         Logging::Info("mem monitor: WaitForSingleObject/GetExitCodeProcess "
                             "unavailable (err=%lu); stopping monitor (cheat stays loaded)",
                             GetLastError());
                         return;
                     }
                 }
-                // WAIT_TIMEOUT: normal, loop again.
             }
         }
         else {
@@ -151,6 +147,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     overlay.Run([&](Overlay& ov) {
         ov.SetVsync(config.vsync);
         ov.SetAllowTearing(config.allow_tearing);
+
+        config.TickBinds();
 
         Animations::BootTick();
 
