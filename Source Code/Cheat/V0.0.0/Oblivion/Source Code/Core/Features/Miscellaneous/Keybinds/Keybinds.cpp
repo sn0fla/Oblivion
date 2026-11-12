@@ -124,9 +124,12 @@ namespace Keybinds {
     static ImVec2 s_dragDelta = ImVec2(0.0f, 0.0f);
     static float  s_rowHover[512] = {};
 
+    static std::vector<ActiveBindRow> s_rows;
+
     void Render(float s, ImVec2 menuPos, float menuW) {
-        std::vector<ActiveBindRow> rows;
-        CollectRows(rows);
+        s_rows.clear();
+        CollectRows(s_rows);
+        const std::vector<ActiveBindRow>& rows = s_rows;
         if (rows.empty()) return;
 
         if (s_pos.x < 0.0f || s_pos.y < 0.0f) {

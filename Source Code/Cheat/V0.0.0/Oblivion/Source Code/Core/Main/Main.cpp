@@ -62,7 +62,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     }
 
     timeBeginPeriod(1);
-    SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+    SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
 
     Logging::Info("Config loaded (safe_mode=%d, esp_enemy=%d, esp_team=%d, fullscreen_mode=%d)",
         config.safe_mode ? 1 : 0,

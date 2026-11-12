@@ -685,10 +685,6 @@ void Overlay::Run(const RenderFn& render)
     HANDLE mmcss = AvSetMmThreadCharacteristicsW(L"Games", &mmcssTask);
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
-    const unsigned cores = std::thread::hardware_concurrency();
-    if (cores >= 4)
-        SetThreadAffinityMask(GetCurrentThread(), static_cast<DWORD_PTR>(0x3));
-
     static const float kClear[4] = { 0.f, 0.f, 0.f, 0.f };
 
     LARGE_INTEGER perfFreq;
@@ -711,10 +707,10 @@ void Overlay::Run(const RenderFn& render)
             {
                 if (WaitForSingleObject(waitable_, 0) == WAIT_OBJECT_0) break;
                 YieldProcessor();
-                if (++spins > 200000)
+                if (++spins > 4000)
                 {
-                    if (WaitForSingleObject(waitable_, 1) == WAIT_OBJECT_0) break;
-                    spins = 0;
+                    WaitForSingleObject(waitable_, 100);
+                    break;
                 }
             }
         }
@@ -794,14 +790,16 @@ void Overlay::Run(const RenderFn& render)
         const int64_t minPeriodTicks = static_cast<int64_t>(
             static_cast<double>(perfFreq.QuadPart) / targetFps);
         const int64_t deadline = frameStart.QuadPart + minPeriodTicks;
-        uint32_t spinAccum = 0;
+        const int64_t sleepTicks = static_cast<int64_t>(
+            static_cast<double>(perfFreq.QuadPart) * 0.001);
         while (running_)
         {
             LARGE_INTEGER now;
             QueryPerformanceCounter(&now);
-            if (now.QuadPart >= deadline) break;
-            if (++spinAccum >= 50) { SwitchToThread(); spinAccum = 0; }
-            else YieldProcessor();
+            const int64_t remaining = deadline - now.QuadPart;
+            if (remaining <= 0) break;
+            if (remaining > sleepTicks) { Sleep(1); continue; }
+            YieldProcessor();
         }
     }
 

@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cfloat>
 #include <cctype>
+#include <cstring>
 #include <algorithm>
 #include <vector>
 #include <random>
@@ -227,11 +228,8 @@ namespace Aimbot {
         if (localIndex == 0xFFFFFFFFu || localIndex > 63u) return false;
 
         const uintptr_t base = ent.address + C_CSPlayerPawn::m_entitySpottedState;
-
-        const uint32_t low = mem.Read<uint32_t>(base + 0x08);
-        const uint32_t high = mem.Read<uint32_t>(base + 0x0C);
-        const uint64_t mask = (static_cast<uint64_t>(high) << 32) | low;
-
+        uint64_t mask = 0;
+        if (!mem.ReadRaw(base + 0x08, &mask, sizeof(mask))) return false;
         return ((mask >> (localIndex & 0x3Fu)) & 1ull) != 0ull;
     }
 
@@ -355,19 +353,21 @@ namespace Aimbot {
 
     static bool WeaponNameMatches(const char* preset, const char* actual) {
         if (!preset || !actual || !actual[0]) return false;
-        std::string a, p;
-        for (const char* s = actual; *s; ++s) {
+        char a[64] = {};
+        char p[64] = {};
+        size_t ai = 0, pi = 0;
+        for (const char* s = actual; *s && ai < sizeof(a) - 1; ++s) {
             unsigned char c = static_cast<unsigned char>(*s);
-            if (isalnum(c)) a += static_cast<char>(tolower(c));
+            if (isalnum(c)) a[ai++] = static_cast<char>(tolower(c));
         }
-        for (const char* s = preset; *s; ++s) {
+        for (const char* s = preset; *s && pi < sizeof(p) - 1; ++s) {
             unsigned char c = static_cast<unsigned char>(*s);
-            if (isalnum(c)) p += static_cast<char>(tolower(c));
+            if (isalnum(c)) p[pi++] = static_cast<char>(tolower(c));
         }
-        if (a.empty() || p.empty()) return false;
-        if (a == p) return true;
-        if (a.find(p) != std::string::npos) return true;
-        if (p.find(a) != std::string::npos) return true;
+        if (ai == 0 || pi == 0) return false;
+        if (strcmp(a, p) == 0) return true;
+        if (strstr(a, p) != nullptr) return true;
+        if (strstr(p, a) != nullptr) return true;
         return false;
     }
 
@@ -434,27 +434,20 @@ namespace Aimbot {
 
         SeedNoise();
 
-        uintptr_t localPawn = 0;
         const AimSettings* active = &config.aim_shared;
 
-        localPawn = mem.Read<uintptr_t>(
-            mem.client + cs2_dumper::offsets::client_dll::dwLocalPlayerPawn);
-        if (localPawn && localPawn >= 0x10000) {
-            char weaponName[64] = {};
-            GetWeaponNameFromPawn(localPawn, weaponName, sizeof(weaponName));
-            if (weaponName[0]) {
-                for (const auto& grp : config.aim_groups) {
-                    bool matched = false;
-                    for (const auto& w : grp.weapons) {
-                        if (WeaponNameMatches(w.c_str(), weaponName)) {
-                            matched = true;
-                            break;
-                        }
-                    }
-                    if (matched) {
-                        active = &grp.settings;
+        if (frame.localWeaponName[0] != '\0') {
+            for (const auto& grp : config.aim_groups) {
+                bool matched = false;
+                for (const auto& w : grp.weapons) {
+                    if (WeaponNameMatches(w.c_str(), frame.localWeaponName)) {
+                        matched = true;
                         break;
                     }
+                }
+                if (matched) {
+                    active = &grp.settings;
+                    break;
                 }
             }
         }
@@ -464,7 +457,7 @@ namespace Aimbot {
 
         if (config.show_menu) return;
         if (!active->enable) return;
-        if (!localPawn || localPawn < 0x10000) return;
+        if (!frame.localPawn || frame.localPawn < 0x10000) return;
 
         const bool aiming = ShouldAim(*active);
 

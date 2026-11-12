@@ -260,6 +260,9 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
     frame.localVelocity = Vector3{};
     frame.viewMatrix = ViewMatrix{};
     frame.localIndex = 0xFFFFFFFFu;
+    frame.localPawn = 0;
+    frame.localWeaponName[0] = '\0';
+    frame.localDefIndex = 0;
 
     if (!mem.client || !mem.pid || !mem.handle) return;
 
@@ -269,6 +272,8 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
         mem.client + cs2_dumper::offsets::client_dll::dwLocalPlayerPawn);
 
     if (!localPawn || localPawn < 0x10000) return;
+
+    frame.localPawn = localPawn;
 
     frame.localTeam = mem.Read<uint8_t>(localPawn + C_BaseEntity::m_iTeamNum);
 
@@ -298,6 +303,32 @@ void BuildFrameSnapshot(FrameSnapshot& frame) {
     const uintptr_t entityList = mem.Read<uintptr_t>(
         mem.client + cs2_dumper::offsets::client_dll::dwEntityList);
     if (!entityList) return;
+
+    {
+        const uintptr_t weaponSvc = mem.Read<uintptr_t>(
+            localPawn + C_BasePlayerPawn::m_pWeaponServices);
+        if (weaponSvc) {
+            const uint32_t wh = mem.Read<uint32_t>(
+                weaponSvc + CPlayer_WeaponServices::m_hActiveWeapon);
+            if (wh && wh != 0xFFFFFFFF) {
+                const uintptr_t wep = ResolveEntityFromHandle(entityList, wh);
+                if (wep) {
+                    const uintptr_t attrMgr = wep + C_EconEntity::m_AttributeManager;
+                    const uintptr_t econItem = attrMgr + C_AttributeContainer::m_Item;
+                    const int defIdx = mem.Read<uint16_t>(
+                        econItem + C_EconItemView::m_iItemDefinitionIndex);
+                    frame.localDefIndex = defIdx;
+                    const char* wn = WeaponNameById(defIdx);
+                    if (wn) {
+                        strncpy_s(frame.localWeaponName, sizeof(frame.localWeaponName), wn, _TRUNCATE);
+                    }
+                    else if (defIdx > 0) {
+                        snprintf(frame.localWeaponName, sizeof(frame.localWeaponName), "Weapon #%d", defIdx);
+                    }
+                }
+            }
+        }
+    }
 
     mem.ReadRaw(mem.client + cs2_dumper::offsets::client_dll::dwViewMatrix,
         &frame.viewMatrix, sizeof(ViewMatrix));

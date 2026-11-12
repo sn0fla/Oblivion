@@ -7,6 +7,7 @@
 #include <exception>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <atomic>
 
@@ -28,7 +29,7 @@ namespace Logging {
     static std::atomic<bool>   g_init{ false };
     static std::atomic<double> g_start{ 0.0 };
     static std::atomic<double> g_lastFlush{ 0.0 };
-    static std::unordered_map<std::string, Bucket> g_buckets;
+    static std::unordered_map<std::string_view, Bucket> g_buckets;
 
     static double NowSec() {
         static const LARGE_INTEGER f = [] {
@@ -76,7 +77,7 @@ namespace Logging {
     void Error(const char* f, ...) { va_list a; va_start(a, f); VWrite("ERROR", f, a); va_end(a); }
     void Debug(const char* f, ...) { va_list a; va_start(a, f); VWrite("DEBUG", f, a); va_end(a); }
 
-    void Sample(const char* name, double v) {
+    void Sample(std::string_view name, double v) {
         if (!g_init.load(std::memory_order_relaxed)) return;
         std::lock_guard<std::mutex> lk(g_mtx);
         Bucket& b = g_buckets[name];
@@ -100,7 +101,7 @@ namespace Logging {
             const Bucket& b = kv.second;
             if (!b.n) continue;
             fprintf(g_file, "  %-26s n=%-6llu last=%7.2f avg=%7.2f min=%7.2f max=%7.2f\n",
-                kv.first.c_str(),
+                kv.first.data(),
                 static_cast<unsigned long long>(b.n),
                 b.last, b.sum / static_cast<double>(b.n), b.mn, b.mx);
             kv.second = Bucket{};

@@ -66,6 +66,9 @@ struct FrameSnapshot {
     Vector3 localVelocity{};
     uint8_t localTeam = 0;
     uint32_t localIndex = 0xFFFFFFFFu;
+    uintptr_t localPawn = 0;
+    char localWeaponName[64] = {};
+    int32_t localDefIndex = 0;
     double publishTime = 0.0;
     double buildDuration = 0.0;
 };

@@ -1,7 +1,7 @@
 #pragma once
 #include <Windows.h>
 #include <cstdint>
-#include <string>
+#include <string_view>
 
 namespace Logging {
 
@@ -13,7 +13,7 @@ namespace Logging {
 	void Error(const char* fmt, ...);
 	void Debug(const char* fmt, ...);
 
-	void Sample(const char* name, double value);
+	void Sample(std::string_view name, double value);
 	void Tick();
 
 	void InstallCrashHandler();

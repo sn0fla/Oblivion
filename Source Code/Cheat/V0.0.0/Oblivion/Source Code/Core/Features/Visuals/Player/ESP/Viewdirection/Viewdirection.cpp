@@ -34,9 +34,9 @@ namespace Features::ESP {
             : config.esp_team_viewdirection_color;
         const ImVec4 baseColor(colArr[0], colArr[1], colArr[2], colArr[3]);
 
-        constexpr float kFovHalf = 45.0f;
+        constexpr float kFovHalf = 55.0f;
         constexpr float kLength = 120.0f;
-        constexpr int   kLines = 21;
+        constexpr int   kLines = 7;
 
         for (const auto& ent : frame.entities) {
             const bool enemy = (ent.team != frame.localTeam);
@@ -71,7 +71,7 @@ namespace Features::ESP {
 
                 const ImU32 lineCol = ImGui::ColorConvertFloat4ToU32(
                     ImVec4(baseColor.x, baseColor.y, baseColor.z, alpha));
-                const float thickness = 1.2f + 0.8f * (1.0f - centerDist);
+                const float thickness = 1.6f + 1.0f * (1.0f - centerDist);
 
                 dl->AddLine(ImVec2(screenStart.x, screenStart.y),
                     ImVec2(screenEnd.x, screenEnd.y), lineCol, thickness);
