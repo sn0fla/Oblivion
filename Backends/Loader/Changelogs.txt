@@ -1,4 +1,3 @@
-- Made all features fully bindable
-- Added a keybinds list
-- Minor UI changes
-- Added Team Check to Aimbot
+- Fixed for latest game patch
+- Improved overall performance
+- Enhanced logging system
