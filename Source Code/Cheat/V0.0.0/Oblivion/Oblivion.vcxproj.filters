@@ -35,18 +35,6 @@
     <Filter Include="Source Code\Core\Overlay">
       <UniqueIdentifier>{cc2a1514-7c13-4bc9-8c9a-b75eaab1e337}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Code\Core\UI">
-      <UniqueIdentifier>{b2f432b1-ee97-4c54-b9c3-0261e6975168}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Code\Core\UI\Layout">
-      <UniqueIdentifier>{a995c9b9-3e4b-44ed-96a1-20e49c9c7c42}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Code\Core\UI\Animations">
-      <UniqueIdentifier>{17862a68-7626-4c6d-be7e-703f24a341bc}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Code\Core\UI\Framework">
-      <UniqueIdentifier>{3c314ff4-ca06-4f99-8674-909832ac0836}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Code\SDK\Entities">
       <UniqueIdentifier>{1c80d771-149e-4766-8889-77e125969c0e}</UniqueIdentifier>
     </Filter>
@@ -110,21 +98,6 @@
     <Filter Include="Source Code\Core\Features\Visuals\Player\ESP\Nametag">
       <UniqueIdentifier>{9522f64f-7d11-4984-9e4a-aec2d4fddf9a}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Code\Core\UI\Cards">
-      <UniqueIdentifier>{dce1e05c-d26b-4f4f-b734-1462e63b3f13}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Code\Core\UI\Header">
-      <UniqueIdentifier>{57e20e6b-837d-4d6a-a940-1a22e1357058}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Code\Core\UI\Helpers">
-      <UniqueIdentifier>{afb19f0d-af28-4587-9654-d914a18497a5}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Code\Core\UI\Internal">
-      <UniqueIdentifier>{af12a1f5-6fc0-41c1-8209-f49973635385}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Code\Core\UI\Stars">
-      <UniqueIdentifier>{11e687c3-f416-4cb0-a0b8-90e0375b4694}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Code\Core\Features\Visuals\Player\ESP\Distance">
       <UniqueIdentifier>{9ed14c06-8e9e-489f-bfea-3b2f6fe73113}</UniqueIdentifier>
     </Filter>
@@ -142,6 +115,30 @@
     </Filter>
     <Filter Include="Source Code\Core\Features\Visuals\Player\ESP\Flags">
       <UniqueIdentifier>{def815b3-fba9-4ef9-a045-bc5370a97404}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Visuals\Player\ESP\Offscreen">
+      <UniqueIdentifier>{a51d46e2-05db-4fc1-b8d2-302f06ac9d1a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Utilities\Logging">
+      <UniqueIdentifier>{16650dd6-0de4-45c1-8615-900daa6ccfea}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\GUI">
+      <UniqueIdentifier>{b2f432b1-ee97-4c54-b9c3-0261e6975168}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\GUI\Animations">
+      <UniqueIdentifier>{17862a68-7626-4c6d-be7e-703f24a341bc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\GUI\Framework">
+      <UniqueIdentifier>{3c314ff4-ca06-4f99-8674-909832ac0836}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\GUI\Widgets">
+      <UniqueIdentifier>{cb4904c7-91ee-4666-b290-4fd696f16238}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Combat\Aimbot">
+      <UniqueIdentifier>{a9da9797-2fc1-4c73-92b9-c8a931a62faa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Code\Core\Features\Miscellaneous\Keybinds">
+      <UniqueIdentifier>{35fb8d77-ead0-40fe-9a34-c6908f4ab02d}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -277,18 +274,6 @@
     <ClInclude Include="Source Code\Core\Overlay\Overlay.hpp">
       <Filter>Source Code\Core\Overlay</Filter>
     </ClInclude>
-    <ClInclude Include="Source Code\Core\UI\UI.hpp">
-      <Filter>Source Code\Core\UI</Filter>
-    </ClInclude>
-    <ClInclude Include="Source Code\Core\UI\Framework\Framework.hpp">
-      <Filter>Source Code\Core\UI\Framework</Filter>
-    </ClInclude>
-    <ClInclude Include="Source Code\Core\UI\Animations\Animations.hpp">
-      <Filter>Source Code\Core\UI\Animations</Filter>
-    </ClInclude>
-    <ClInclude Include="Source Code\Core\UI\Layout\Layout.hpp">
-      <Filter>Source Code\Core\UI\Layout</Filter>
-    </ClInclude>
     <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Box\Box.hpp">
       <Filter>Source Code\Core\Features\Visuals\Player\ESP\Box</Filter>
     </ClInclude>
@@ -300,18 +285,6 @@
     </ClInclude>
     <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Skeleton\Skeleton.hpp">
       <Filter>Source Code\Core\Features\Visuals\Player\ESP\Skeleton</Filter>
-    </ClInclude>
-    <ClInclude Include="Source Code\Core\UI\UI_Cards.hpp">
-      <Filter>Source Code\Core\UI\Cards</Filter>
-    </ClInclude>
-    <ClInclude Include="Source Code\Core\UI\UI_Header.hpp">
-      <Filter>Source Code\Core\UI\Header</Filter>
-    </ClInclude>
-    <ClInclude Include="Source Code\Core\UI\UI_Internal.hpp">
-      <Filter>Source Code\Core\UI\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="Source Code\Core\UI\UI_Stars.hpp">
-      <Filter>Source Code\Core\UI\Stars</Filter>
     </ClInclude>
     <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Distance\Distance.hpp">
       <Filter>Source Code\Core\Features\Visuals\Player\ESP\Distance</Filter>
@@ -330,6 +303,30 @@
     </ClInclude>
     <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Flags\Flags.hpp">
       <Filter>Source Code\Core\Features\Visuals\Player\ESP\Flags</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Offscreen\Offscreen.hpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Offscreen</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Utilities\Logging\Logging.hpp">
+      <Filter>Source Code\Utilities\Logging</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\GUI\GUI.hpp">
+      <Filter>Source Code\Core\GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\GUI\Framework\Framework.hpp">
+      <Filter>Source Code\Core\GUI\Framework</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\GUI\Animations\Animations.hpp">
+      <Filter>Source Code\Core\GUI\Animations</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\GUI\Widgets\Widgets.hpp">
+      <Filter>Source Code\Core\GUI\Widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Features\Combat\Aimbot\Aimbot.hpp">
+      <Filter>Source Code\Core\Features\Combat\Aimbot</Filter>
+    </ClInclude>
+    <ClInclude Include="Source Code\Core\Features\Miscellaneous\Keybinds\Keybinds.hpp">
+      <Filter>Source Code\Core\Features\Miscellaneous\Keybinds</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -369,18 +366,6 @@
     <ClCompile Include="Source Code\Core\Main\Main.cpp">
       <Filter>Source Code\Core\Main</Filter>
     </ClCompile>
-    <ClCompile Include="Source Code\Core\UI\UI.cpp">
-      <Filter>Source Code\Core\UI</Filter>
-    </ClCompile>
-    <ClCompile Include="Source Code\Core\UI\Framework\Framework.cpp">
-      <Filter>Source Code\Core\UI\Framework</Filter>
-    </ClCompile>
-    <ClCompile Include="Source Code\Core\UI\Animations\Animations.cpp">
-      <Filter>Source Code\Core\UI\Animations</Filter>
-    </ClCompile>
-    <ClCompile Include="Source Code\Core\UI\Layout\Layout.cpp">
-      <Filter>Source Code\Core\UI\Layout</Filter>
-    </ClCompile>
     <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Box\Box.cpp">
       <Filter>Source Code\Core\Features\Visuals\Player\ESP\Box</Filter>
     </ClCompile>
@@ -395,21 +380,6 @@
     </ClCompile>
     <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Skeleton\Skeleton.cpp">
       <Filter>Source Code\Core\Features\Visuals\Player\ESP\Skeleton</Filter>
-    </ClCompile>
-    <ClCompile Include="Source Code\Core\UI\UI_Cards.cpp">
-      <Filter>Source Code\Core\UI\Cards</Filter>
-    </ClCompile>
-    <ClCompile Include="Source Code\Core\UI\UI_Header.cpp">
-      <Filter>Source Code\Core\UI\Header</Filter>
-    </ClCompile>
-    <ClCompile Include="Source Code\Core\UI\UI_Helpers.cpp">
-      <Filter>Source Code\Core\UI\Helpers</Filter>
-    </ClCompile>
-    <ClCompile Include="Source Code\Core\UI\UI_Internal.cpp">
-      <Filter>Source Code\Core\UI\Internal</Filter>
-    </ClCompile>
-    <ClCompile Include="Source Code\Core\UI\UI_Stars.cpp">
-      <Filter>Source Code\Core\UI\Stars</Filter>
     </ClCompile>
     <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Distance\Distance.cpp">
       <Filter>Source Code\Core\Features\Visuals\Player\ESP\Distance</Filter>
@@ -428,6 +398,30 @@
     </ClCompile>
     <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Flags\Flags.cpp">
       <Filter>Source Code\Core\Features\Visuals\Player\ESP\Flags</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Offscreen\Offscreen.cpp">
+      <Filter>Source Code\Core\Features\Visuals\Player\ESP\Offscreen</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Utilities\Logging\Logging.cpp">
+      <Filter>Source Code\Utilities\Logging</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\GUI\GUI.cpp">
+      <Filter>Source Code\Core\GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\GUI\Framework\Framework.cpp">
+      <Filter>Source Code\Core\GUI\Framework</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\GUI\Animations\Animations.cpp">
+      <Filter>Source Code\Core\GUI\Animations</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\GUI\Widgets\Widgets.cpp">
+      <Filter>Source Code\Core\GUI\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Features\Combat\Aimbot\Aimbot.cpp">
+      <Filter>Source Code\Core\Features\Combat\Aimbot</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Code\Core\Features\Miscellaneous\Keybinds\Keybinds.cpp">
+      <Filter>Source Code\Core\Features\Miscellaneous\Keybinds</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

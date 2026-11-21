@@ -126,10 +126,11 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>JM_XORSTR_DISABLE_AVX_INTRINSICS</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>C:\Oblivion Development\Cheat\V0.0.0\Oblivion\Source Code\External\Xorstr;C:\Oblivion Development\Cheat\V0.0.0\Oblivion\Source Code\External\ImGUI;C:\Oblivion Development\Cheat\V0.0.0\Oblivion;C:\Oblivion Development\Cheat\V0.0.0\Oblivion\Source Code\External;C:\Oblivion Development\Cheat\V0.0.0\Oblivion\Source Code\External\Image;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -141,28 +142,27 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Source Code\Core\Features\Combat\Aimbot\Aimbot.hpp" />
+    <ClInclude Include="Source Code\Core\Features\Miscellaneous\Keybinds\Keybinds.hpp" />
     <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Box\Box.hpp" />
     <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Distance\Distance.hpp" />
     <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Flags\Flags.hpp" />
     <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Headcircle\Headcircle.hpp" />
     <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Healthbar\Healthbar.hpp" />
     <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Nametag\Nametag.hpp" />
+    <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Offscreen\Offscreen.hpp" />
     <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Skeleton\Skeleton.hpp" />
     <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Snapline\Snapline.hpp" />
     <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Viewdirection\Viewdirection.hpp" />
     <ClInclude Include="Source Code\Core\Features\Visuals\Player\ESP\Weapon\Weapon.hpp" />
+    <ClInclude Include="Source Code\Core\GUI\Animations\Animations.hpp" />
+    <ClInclude Include="Source Code\Core\GUI\Framework\Framework.hpp" />
+    <ClInclude Include="Source Code\Core\GUI\GUI.hpp" />
+    <ClInclude Include="Source Code\Core\GUI\Widgets\Widgets.hpp" />
     <ClInclude Include="Source Code\Core\Memory\Memory.hpp" />
     <ClInclude Include="Source Code\Core\Overlay\Overlay.hpp" />
     <ClInclude Include="Source Code\Core\Protection\Protection.hpp" />
     <ClInclude Include="Source Code\Core\Render\Render.hpp" />
-    <ClInclude Include="Source Code\Core\UI\Animations\Animations.hpp" />
-    <ClInclude Include="Source Code\Core\UI\Framework\Framework.hpp" />
-    <ClInclude Include="Source Code\Core\UI\Layout\Layout.hpp" />
-    <ClInclude Include="Source Code\Core\UI\UI.hpp" />
-    <ClInclude Include="Source Code\Core\UI\UI_Cards.hpp" />
-    <ClInclude Include="Source Code\Core\UI\UI_Header.hpp" />
-    <ClInclude Include="Source Code\Core\UI\UI_Internal.hpp" />
-    <ClInclude Include="Source Code\Core\UI\UI_Stars.hpp" />
     <ClInclude Include="Source Code\External\Image\stb_image.h" />
     <ClInclude Include="Source Code\External\ImGUI\imconfig.h" />
     <ClInclude Include="Source Code\External\ImGUI\imgui.h" />
@@ -201,34 +201,33 @@
     <ClInclude Include="Source Code\SDK\Schemas\worldrenderer_dll.hpp" />
     <ClInclude Include="Source Code\SDK\Types\Types.hpp" />
     <ClInclude Include="Source Code\Utilities\Config\Config.hpp" />
+    <ClInclude Include="Source Code\Utilities\Logging\Logging.hpp" />
     <ClInclude Include="Source Code\Utilities\Maths\Maths.hpp" />
     <ClInclude Include="Source Code\Utilities\Vectors\Vectors.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Source Code\Core\Features\Combat\Aimbot\Aimbot.cpp" />
+    <ClCompile Include="Source Code\Core\Features\Miscellaneous\Keybinds\Keybinds.cpp" />
     <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Box\Box.cpp" />
     <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Distance\Distance.cpp" />
     <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Flags\Flags.cpp" />
     <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Headcircle\Headcircle.cpp" />
     <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Healthbar\Healthbar.cpp" />
     <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Nametag\Nametag.cpp" />
+    <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Offscreen\Offscreen.cpp" />
     <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Skeleton\Skeleton.cpp" />
     <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Snapline\Snapline.cpp" />
     <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Viewdirection\Viewdirection.cpp" />
     <ClCompile Include="Source Code\Core\Features\Visuals\Player\ESP\Weapon\Weapon.cpp" />
+    <ClCompile Include="Source Code\Core\GUI\Animations\Animations.cpp" />
+    <ClCompile Include="Source Code\Core\GUI\Framework\Framework.cpp" />
+    <ClCompile Include="Source Code\Core\GUI\GUI.cpp" />
+    <ClCompile Include="Source Code\Core\GUI\Widgets\Widgets.cpp" />
     <ClCompile Include="Source Code\Core\Main\Main.cpp" />
     <ClCompile Include="Source Code\Core\Memory\Memory.cpp" />
     <ClCompile Include="Source Code\Core\Overlay\Overlay.cpp" />
     <ClCompile Include="Source Code\Core\Protection\Protection.cpp" />
     <ClCompile Include="Source Code\Core\Render\Render.cpp" />
-    <ClCompile Include="Source Code\Core\UI\Animations\Animations.cpp" />
-    <ClCompile Include="Source Code\Core\UI\Framework\Framework.cpp" />
-    <ClCompile Include="Source Code\Core\UI\Layout\Layout.cpp" />
-    <ClCompile Include="Source Code\Core\UI\UI.cpp" />
-    <ClCompile Include="Source Code\Core\UI\UI_Cards.cpp" />
-    <ClCompile Include="Source Code\Core\UI\UI_Header.cpp" />
-    <ClCompile Include="Source Code\Core\UI\UI_Helpers.cpp" />
-    <ClCompile Include="Source Code\Core\UI\UI_Internal.cpp" />
-    <ClCompile Include="Source Code\Core\UI\UI_Stars.cpp" />
     <ClCompile Include="Source Code\External\ImGUI\imgui.cpp" />
     <ClCompile Include="Source Code\External\ImGUI\imgui_draw.cpp" />
     <ClCompile Include="Source Code\External\ImGUI\imgui_impl_dx11.cpp" />
@@ -237,6 +236,7 @@
     <ClCompile Include="Source Code\External\ImGUI\imgui_widgets.cpp" />
     <ClCompile Include="Source Code\SDK\Entities\Entities.cpp" />
     <ClCompile Include="Source Code\Utilities\Config\Config.cpp" />
+    <ClCompile Include="Source Code\Utilities\Logging\Logging.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
