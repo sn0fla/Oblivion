@@ -227,7 +227,7 @@ bool Overlay::CreateOverlayWindow()
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = WndProcStatic;
     wc.hInstance = hInst_;
-    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
     wc.lpszClassName = className_.c_str();
     if (!RegisterClassExW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
         return Fail("RegisterClassExW failed", HRESULT_FROM_WIN32(GetLastError()));

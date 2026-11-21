@@ -450,7 +450,7 @@ HANDLE Memory::TryHijackHandle(DWORD targetPid) {
         TOKEN_PRIVILEGES tp = {};
         tp.PrivilegeCount = 1;
         tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-        if (LookupPrivilegeValueW(nullptr, SE_DEBUG_NAME, &tp.Privileges[0].Luid))
+        if (LookupPrivilegeValueW(nullptr, L"SeDebugPrivilege", &tp.Privileges[0].Luid))
             AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), nullptr, nullptr);
         CloseHandle(hToken);
     }
